@@ -1,0 +1,176 @@
+##################################
+# V1.1
+##################################
+#changelog:
+# V1 test
+# V1.1 Prod
+####################  
+
+substitutions:
+  #############################
+  # comomon substitution #####
+  ############################  
+  name: "victronble-esp"
+  esphome_name: "VictronBle-Esp"
+  # nonm affiché dans l'interface #
+  friendly_name: "Victron Ble Interface"
+  #######################################
+  external_components_source: github://Fabian-Schmidt/esphome-victron_ble
+  sensor_prefix: ""
+  device_description: "Read data from Victron Appliance Ble - Grettings : Fabian-Schmidt "
+  time_timezone: "Europe/Paris"
+  projectname: "Pat.Victron_Ble_Devices"
+  appversion: "1.1"
+  log_level: "INFO"
+  baud_ratelog: "0"
+  api_encryption_key: !secret victronblekey
+  ota_pswd: !secret ota_pswd
+  ap_pwd: !secret ota_pswd
+  adress_ip: !secret ip_victronble
+  gateway_ip: !secret ip_gateway
+  dns_ip: !secret ip_dns
+  time_id: ha_time
+  time_platform: homeassistant
+    # Set the MAC addresses and encryption keys of your Victron devices here
+  # The values here are examples and cannot work for your devices
+  smart_10020_mac_address: !secret mppt100_20_mac
+  smart_10020_encryption_key: !secret mppt100_20_key
+  smart_10030_mac_address: !secret mppt100_30_mac
+  smart_10030_encryption_key: !secret mppt100_30_key
+  
+###############################
+### definition de la carte ESP
+###############################  
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf  
+
+###################################
+### inclusion de la partie commune 
+###################################
+
+<<: !include .common.yaml
+
+##########################
+##  composants externes ##
+##########################
+
+external_components:
+  - source: ${external_components_source}
+    refresh: 0s
+
+logger:
+  level: DEBUG
+
+esp32_ble_tracker:
+
+victron_ble:
+
+#####################################################################################
+##  smartsolar mppt 100/20
+#####################################################################################
+  - id: SmartSolar10020
+    mac_address: ${smart_10020_mac_address}
+    bindkey: ${ smart_10020_encryption_key}
+  - id: SmartSolar10030
+    mac_address: ${smart_10030_mac_address}
+    bindkey: ${ smart_10030_encryption_key}
+
+sensor:
+
+  # SmartSolar10020
+  
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10020
+    name: "Mppt10020 Battery Voltage"
+    type: BATTERY_VOLTAGE
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10020
+    name: "Mppt10020 Battery Current"
+    type: BATTERY_CURRENT
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10020
+    name: "Mppt10020 Yield Today"
+    type: YIELD_TODAY
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10020
+    name: "Mppt10020 PV Power"
+    type: PV_POWER
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10020
+    name: "Mppt10020 Load Current"
+    type: LOAD_CURRENT
+ 
+  # SmartSolar10030
+  
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10030
+    name: "Mppt10030 Battery Voltage"
+    type: BATTERY_VOLTAGE
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10030
+    name: "Mppt10030 Battery Current"
+    type: BATTERY_CURRENT
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10030
+    name: "Mppt10030 Yield Today"
+    type: YIELD_TODAY
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10030
+    name: "Mppt10030 PV Power"
+    type: PV_POWER
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10030
+    name: "Mppt10030 Load Current"
+    type: LOAD_CURRENT
+  
+
+binary_sensor:
+
+  # SmartSolar10020
+  
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10020
+    name: "MPPT10020 is in Fault state"
+    type: DEVICE_STATE_FAULT
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10020
+    name: "MPPT10020 has Error"
+    type: CHARGER_ERROR
+
+  # SmartSolar10030
+  
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10030
+    name: "MPPT10030 is in Fault state"
+    type: DEVICE_STATE_FAULT
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10030
+    name: "MPPT10030 has Error"
+    type: CHARGER_ERROR
+
+text_sensor:
+
+   # SmartSolar10020
+
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10020
+    name: "MPPT10020 state"
+    type: DEVICE_STATE
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10020
+    name: "MPPT10020 Error reason"
+    type: CHARGER_ERROR
+
+   # SmartSolar10030
+
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10030
+    name: "MPPT10030 state"
+    type: DEVICE_STATE
+  - platform: victron_ble
+    victron_ble_id: SmartSolar10030
+    name: "MPPT10030 Error reason"
+    type: CHARGER_ERROR
