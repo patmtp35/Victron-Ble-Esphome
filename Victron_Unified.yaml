@@ -1,0 +1,334 @@
+#############################################
+# V5.0 – Unified BLE + VE.Direct Redundant
+# 2 MPPT (100/20 + 100/30)
+# Chaque MPPT : BLE + VE.Direct
+#############################################
+
+substitutions:
+  name: "victron-unified-esp"
+  esphome_name: "VictronUnified-Esp"
+  friendly_name: "Victron Unified Interface"
+  
+  # pour common.yaml
+  sensor_prefix: "victron_unified"
+
+  # sources externes
+  external_components_source_ble: github://Fabian-Schmidt/esphome-victron_ble
+  external_components_source_vedirect: github://KinDR007/VictronMPPT-ESPHOME@main
+
+  device_description: "Victron BLE + VE.Direct Unified Interface"
+  time_timezone: "Europe/Paris"
+  projectname: "Pat.VictronUnified"
+  appversion: "5.0.0"
+
+  log_level: "VERBOSE"
+  baud_ratelog: "0"
+
+  ota_pswd: !secret ota_pswd
+  ap_pwd: !secret ota_pswd
+
+  adress_ip: !secret ip_victron_unified
+  gateway_ip: !secret ip_gateway
+  dns_ip: !secret ip_dns
+
+  time_id: ha_time
+  time_platform: homeassistant
+
+  # BLE MPPT 100/20
+  smart_10020_mac_address: !secret mppt100_20_mac
+  smart_10020_encryption_key: !secret mppt100_20_key
+
+  # BLE MPPT 100/30
+  smart_10030_mac_address: !secret mppt100_30_mac
+  smart_10030_encryption_key: !secret mppt100_30_key
+   
+  api_encryption_key: !secret smartsolar2key
+
+#############################################
+### ESP32 definition
+#############################################
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+
+#############################################
+### COMMON CONFIG
+#############################################
+
+<<: !include .common.yaml
+
+
+#############################################
+### EXTERNAL COMPONENTS
+#############################################
+
+external_components:
+  - source: ${external_components_source_ble}
+    refresh: 0s
+  - source: ${external_components_source_vedirect}
+    refresh: 0s
+
+
+#############################################
+### BLE TRACKER + BLE DEVICES
+#############################################
+
+esp32_ble_tracker:
+
+victron_ble:
+  - id: mppt10020_ble
+    mac_address: ${smart_10020_mac_address}
+    bindkey: ${smart_10020_encryption_key}
+
+  - id: mppt10030_ble
+    mac_address: ${smart_10030_mac_address}
+    bindkey: ${smart_10030_encryption_key}
+
+
+#############################################
+### VE.Direct — Dual UART
+#############################################
+
+uart:
+  # MPPT 100/20 VE.Direct
+  - id: uart_vedirect1
+    tx_pin: GPIO18    # NON CONNECTÉ
+    rx_pin: GPIO19    # TX du MPPT100/20
+    baud_rate: 19200
+    rx_buffer_size: 256
+
+  # MPPT 100/30 VE.Direct
+  - id: uart_vedirect2
+    tx_pin: GPIO17    # NON CONNECTÉ
+    rx_pin: GPIO16    # TX du MPPT100/30
+    baud_rate: 19200
+    rx_buffer_size: 256
+
+
+victron:
+  - uart_id: uart_vedirect1
+    id: mppt10020_vd
+    throttle: 10s
+
+  - uart_id: uart_vedirect2
+    id: mppt10030_vd
+    throttle: 10s
+
+
+#############################################
+### SENSOR DEFINITIONS – Unified Standard
+#############################################
+
+sensor:
+
+  #################################################
+  # MPPT 100/20 BLE
+  #################################################
+  - platform: victron_ble
+    victron_ble_id: mppt10020_ble
+    name: "mppt10020_ble_battery_voltage"
+    type: BATTERY_VOLTAGE
+
+  - platform: victron_ble
+    victron_ble_id: mppt10020_ble
+    name: "mppt10020_ble_battery_current"
+    type: BATTERY_CURRENT
+
+  - platform: victron_ble
+    victron_ble_id: mppt10020_ble
+    name: "mppt10020_ble_panel_voltage"
+    type: INPUT_VOLTAGE
+
+  - platform: victron_ble
+    victron_ble_id: mppt10020_ble
+    name: "mppt10020_ble_panel_power"
+    type: PV_POWER
+
+  - platform: victron_ble
+    victron_ble_id: mppt10020_ble
+    name: "mppt10020_ble_load_current"
+    type: LOAD_CURRENT
+
+  - platform: victron_ble
+    victron_ble_id: mppt10020_ble
+    name: "mppt10020_ble_yield_today"
+    type: YIELD_TODAY
+
+  - platform: victron_ble
+    victron_ble_id: mppt10020_ble
+    name: "mppt10020_ble_temperature"
+    type: TEMPERATURE
+
+
+  #################################################
+  # MPPT 100/30 BLE
+  #################################################
+  - platform: victron_ble
+    victron_ble_id: mppt10030_ble
+    name: "mppt10030_ble_panel_voltage"
+    type: INPUT_VOLTAGE
+
+  - platform: victron_ble
+    victron_ble_id: mppt10030_ble
+    name: "mppt10030_ble_panel_power"
+    type: PV_POWER
+
+  - platform: victron_ble
+    victron_ble_id: mppt10030_ble
+    name: "mppt10030_ble_battery_voltage"
+    type: BATTERY_VOLTAGE
+
+  - platform: victron_ble
+    victron_ble_id: mppt10030_ble
+    name: "mppt10030_ble_battery_current"
+    type: BATTERY_CURRENT
+
+  - platform: victron_ble
+    victron_ble_id: mppt10030_ble
+    name: "mppt10030_ble_load_current"
+    type: LOAD_CURRENT
+
+  - platform: victron_ble
+    victron_ble_id: mppt10030_ble
+    name: "mppt10030_ble_yield_today"
+    type: YIELD_TODAY
+
+  - platform: victron_ble
+    victron_ble_id: mppt10030_ble
+    name: "mppt10030_ble_error_code"
+    type: CHARGER_ERROR
+
+
+  #################################################
+  # MPPT 100/20 VE.Direct
+  #################################################
+  - platform: victron
+    victron_id: mppt10020_vd
+    panel_voltage:
+      name: "mppt10020_vd_panel_voltage"
+    panel_power:
+      name: "mppt10020_vd_panel_power"
+    battery_voltage:
+      name: "mppt10020_vd_battery_voltage"
+    battery_current:
+      name: "mppt10020_vd_battery_current"
+    yield_today:
+      name: "mppt10020_vd_yield_today"
+    yield_yesterday:
+      name: "mppt10020_vd_yield_yesterday"
+    yield_total:
+      name: "mppt10020_vd_yield_total"
+    max_power_today:
+      name: "mppt10020_vd_max_power_today"
+    max_power_yesterday:
+      name: "mppt10020_vd_max_power_yesterday"
+    day_number:
+      name: "mppt10020_vd_day_number"
+    error_code:
+      name: "mppt10020_vd_error_code"
+    charging_mode_id:
+      name: "mppt10020_vd_charging_mode_id"
+    tracking_mode_id:
+      name: "mppt10020_vd_tracking_mode_id"
+    load_current:
+      name: "mppt10020_vd_load_current"
+
+
+  #################################################
+  # MPPT 100/30 VE.Direct
+  #################################################
+  - platform: victron
+    victron_id: mppt10030_vd
+    panel_voltage:
+      name: "mppt10030_vd_panel_voltage"
+    panel_power:
+      name: "mppt10030_vd_panel_power"
+    battery_voltage:
+      name: "mppt10030_vd_battery_voltage"
+    battery_current:
+      name: "mppt10030_vd_battery_current"
+    yield_today:
+      name: "mppt10030_vd_yield_today"
+    yield_yesterday:
+      name: "mppt10030_vd_yield_yesterday"
+    yield_total:
+      name: "mppt10030_vd_yield_total"
+    max_power_today:
+      name: "mppt10030_vd_max_power_today"
+    max_power_yesterday:
+      name: "mppt10030_vd_max_power_yesterday"
+    day_number:
+      name: "mppt10030_vd_day_number"
+    error_code:
+      name: "mppt10030_vd_error_code"
+    charging_mode_id:
+      name: "mppt10030_vd_charging_mode_id"
+    tracking_mode_id:
+      name: "mppt10030_vd_tracking_mode_id"
+    load_current:
+      name: "mppt10030_vd_load_current"
+
+
+#############################################
+### TEXT SENSORS
+#############################################
+
+text_sensor:
+
+  # MPPT10020 VE.Direct
+  - platform: victron
+    victron_id: mppt10020_vd
+    charging_mode:
+      name: "mppt10020_vd_charging_mode"
+    error:
+      name: "mppt10020_vd_error"
+    tracking_mode:
+      name: "mppt10020_vd_tracking_mode"
+    firmware_version:
+      name: "mppt10020_vd_firmware_version"
+    device_type:
+      name: "mppt10020_vd_device_type"
+    serial_number:
+      name: "mppt10020_vd_serial_number"
+
+  # MPPT10030 VE.Direct
+  - platform: victron
+    victron_id: mppt10030_vd
+    charging_mode:
+      name: "mppt10030_vd_charging_mode"
+    error:
+      name: "mppt10030_vd_error"
+    tracking_mode:
+      name: "mppt10030_vd_tracking_mode"
+    firmware_version:
+      name: "mppt10030_vd_firmware_version"
+    device_type:
+      name: "mppt10030_vd_device_type"
+    serial_number:
+      name: "mppt10030_vd_serial_number"
+
+
+#############################################
+### BINARY SENSORS
+#############################################
+
+binary_sensor:
+
+  # MPPT10020 VE.Direct
+  - platform: victron
+    victron_id: mppt10020_vd
+    load_state:
+      name: "mppt10020_vd_load_state"
+    relay_state:
+      name: "mppt10020_vd_relay_state"
+
+  # MPPT10030 VE.Direct
+  - platform: victron
+    victron_id: mppt10030_vd
+    load_state:
+      name: "mppt10030_vd_load_state"
+    relay_state:
+      name: "mppt10030_vd_relay_state"
