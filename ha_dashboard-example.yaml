@@ -1,0 +1,55 @@
+type: horizontal-stack
+cards:
+  - type: entities
+    title: 1x500 Bifacial
+    entities:
+      - entity: sensor.smartsolar1_esp_battery_voltage
+        name: Bat volt
+        icon: mdi:flash-triangle
+      - entity: sensor.smartsolar1_esp_charging_mode
+        name: Charg mode
+      - entity: sensor.smartsolar1_esp_max_power_yesterday
+        name: Mx pwr yest
+      - entity: sensor.smartsolar1_esp_yield_yesterday
+        name: Yld yest
+      - entity: sensor.smartsolar1_esp_yield_total
+        name: Yld Tt
+        icon: mdi:exponent
+      - entity: sensor.smartsolar1_esp_day_number
+        name: Day nbr
+        icon: mdi:calendar-today-outline
+      - entity: sensor.smartsolar1_esp_tracking_mode
+        name: track mode
+        icon: mdi:radar
+    card_mod:
+      style: |
+        ha-icon {
+          display: none;
+        }
+  - type: entities
+    title: 2x420 Mono
+    entities:
+      - entity: sensor.mppt10030_best_battery_voltage
+        name: Bat Volt
+        icon: mdi:flash-triangle
+        secondary_info: none
+      - entity: sensor.victron_unified_esp_mppt10030_vd_charging_mode
+        name: Charge Mode
+      - entity: sensor.victron_unified_esp_mppt10030_vd_max_power_yesterday
+        name: Mx pwr yest
+      - entity: sensor.victron_unified_esp_mppt10030_vd_yield_yesterday
+        name: Yld yest
+      - entity: sensor.victron_unified_esp_mppt10030_vd_yield_total
+        name: Yld Tt
+        icon: mdi:exponent
+      - entity: sensor.victron_unified_esp_mppt10030_vd_day_number
+        name: Day nbr
+        icon: mdi:calendar-today-outline
+      - entity: sensor.victron_unified_esp_mppt10030_vd_tracking_mode
+        name: Track mode
+        icon: mdi:radar
+    card_mod:
+      style: |
+        ha-icon {
+          display: none;
+        }

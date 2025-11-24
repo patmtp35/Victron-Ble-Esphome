@@ -1,0 +1,103 @@
+    ######################################################################
+    # MPPT 100/20 – Fallback VE.Direct → BLE (avec arrondis)
+    ######################################################################
+
+    - name: "mppt10020_best_panel_voltage"
+      unit_of_measurement: "V"
+      state: >
+        {% set vd = states('sensor.victron_unified_esp_mppt10020_vd_panel_voltage') %}
+        {% set ble = states('sensor.victron_unified_esp_mppt10020_ble_panel_voltage') %}
+        {{ (vd if vd not in ['unknown','unavailable','None'] else ble) | float | round(1) }}
+
+    - name: "mppt10020_best_panel_power"
+      unit_of_measurement: "W"
+      state: >
+        {% set vd = states('sensor.victron_unified_esp_mppt10020_vd_panel_power') %}
+        {% set ble = states('sensor.victron_unified_esp_mppt10020_ble_panel_power') %}
+        {{ (vd if vd not in ['unknown','unavailable','None'] else ble) | float | round(0) }}
+
+    - name: "mppt10020_best_battery_voltage"
+      unit_of_measurement: "V"
+      state: >
+        {% set vd = states('sensor.victron_unified_esp_mppt10020_vd_battery_voltage') %}
+        {% set ble = states('sensor.victron_unified_esp_mppt10020_ble_battery_voltage') %}
+        {{ (vd if vd not in ['unknown','unavailable','None'] else ble) | float | round(2) }}
+
+    - name: "mppt10020_best_battery_current"
+      unit_of_measurement: "A"
+      state: >
+        {% set vd = states('sensor.victron_unified_esp_mppt10020_vd_battery_current') %}
+        {% set ble = states('sensor.victron_unified_esp_mppt10020_ble_battery_current') %}
+        {{ (vd if vd not in ['unknown','unavailable','None'] else ble) | float | round(2) }}
+
+    - name: "mppt10020_best_load_current"
+      unit_of_measurement: "A"
+      state: >
+        {% set vd = states('sensor.victron_unified_esp_mppt10020_vd_load_current') %}
+        {% set ble = states('sensor.victron_unified_esp_mppt10020_ble_load_current') %}
+        {{ (vd if vd not in ['unknown','unavailable','None'] else ble) | float | round(2) }}
+
+    - name: "mppt10020_best_yield_today"
+      unit_of_measurement: "Wh"
+      state: >
+        {% set vd = states('sensor.victron_unified_esp_mppt10020_vd_yield_today') %}
+        {% set ble = states('sensor.victron_unified_esp_mppt10020_ble_yield_today') %}
+        {{ (vd if vd not in ['unknown','unavailable','None'] else ble) | float | round(0) }}
+
+    - name: "mppt10020_best_temperature"
+      unit_of_measurement: "°C"
+      state: >
+        {% set ble = states('sensor.victron_unified_esp_mppt10020_ble_temperature') %}
+        {{ ble | float | round(1) }}
+
+
+    ######################################################################
+    # MPPT 100/30 – Fallback VE.Direct → BLE (avec arrondis)
+    ######################################################################
+
+    - name: "mppt10030_best_panel_voltage"
+      unit_of_measurement: "V"
+      state: >
+        {% set vd = states('sensor.victron_unified_esp_mppt10030_vd_panel_voltage') %}
+        {% set ble = states('sensor.victron_unified_esp_mppt10030_ble_panel_voltage') %}
+        {{ (vd if vd not in ['unknown','unavailable','None'] else ble) | float | round(1) }}
+
+    - name: "mppt10030_best_panel_power"
+      unit_of_measurement: "W"
+      state: >
+        {% set vd = states('sensor.victron_unified_esp_mppt10030_vd_panel_power') %}
+        {% set ble = states('sensor.victron_unified_esp_mppt10030_ble_panel_power') %}
+        {{ (vd if vd not in ['unknown','unavailable','None'] else ble) | float | round(0) }}
+
+    - name: "mppt10030_best_battery_voltage"
+      unit_of_measurement: "V"
+      state: >
+        {% set vd = states('sensor.victron_unified_esp_mppt10030_vd_battery_voltage') %}
+        {% set ble = states('sensor.victron_unified_esp_mppt10030_ble_battery_voltage') %}
+        {{ (vd if vd not in ['unknown','unavailable','None'] else ble) | float | round(2) }}
+
+    - name: "mppt10030_best_battery_current"
+      unit_of_measurement: "A"
+      state: >
+        {% set vd = states('sensor.victron_unified_esp_mppt10030_vd_battery_current') %}
+        {% set ble = states('sensor.victron_unified_esp_mppt10030_ble_battery_current') %}
+        {{ (vd if vd not in ['unknown','unavailable','None'] else ble) | float | round(2) }}
+
+    - name: "mppt10030_best_load_current"
+      unit_of_measurement: "A"
+      state: >
+        {% set vd = states('sensor.victron_unified_esp_mppt10030_vd_load_current') %}
+        {% set ble = states('sensor.victron_unified_esp_mppt10030_ble_load_current') %}
+        {{ (vd if vd not in ['unknown','unavailable','None'] else ble) | float | round(2) }}
+
+    - name: "mppt10030_best_yield_today"
+      unit_of_measurement: "Wh"
+      state: >
+        {% set vd = states('sensor.victron_unified_esp_mppt10030_vd_yield_today') %}
+        {% set ble = states('sensor.victron_unified_esp_mppt10030_ble_yield_today') %}
+
+        {% if vd not in ['unknown','unavailable','None'] %}
+          {{ vd | float | round(0) }}
+        {% else %}
+          {{ (ble | float * 1000) | round(0) }}
+        {% endif %}
