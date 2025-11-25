@@ -1,5 +1,7 @@
 # Victron Unified ESP – SmartSolar BLE + VE.Direct (Fallback Auto)
 
+ATTENTION VERSION Perso adaptée a mes besoins
+
 Projet ESPHome permettant de lire simultanément les données de contrôleurs de charge **Victron SmartSolar MPPT** via :
 
 - **Bluetooth Low Energy (BLE)**  
