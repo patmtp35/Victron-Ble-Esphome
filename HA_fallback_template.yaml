@@ -101,3 +101,82 @@
         {% else %}
           {{ (ble | float * 1000) | round(0) }}
         {% endif %}
+    ######################################################################
+    # SmartShunt – Fallback VE.Direct → BLE (avec arrondis)
+    ######################################################################
+    
+    - name: "smartshunt_best_battery_voltage"
+      unit_of_measurement: "V"
+      device_class: voltage
+      state_class: measurement
+      availability: >
+        {{
+          states('sensor.victron_unified_interface_smartshunt500a_ble_battery_voltage') not in ['unknown','unavailable']
+          or
+          states('sensor.victron_unified_interface_smartshunt500a_vd_battery_voltage') not in ['unknown','unavailable']
+        }}
+      state: >
+        {% set ble = states('sensor.victron_unified_interface_smartshunt500a_ble_battery_voltage') %}
+        {% set vd  = states('sensor.victron_unified_interface_smartshunt500a_vd_battery_voltage') %}
+
+        {% if ble not in ['unknown','unavailable'] %}
+          {{ ble | float | round(2) }}
+        {% elif vd not in ['unknown','unavailable'] %}
+          {{ vd | float | round(2) }}
+        {% else %}
+          {{ this.state }}
+        {% endif %}
+
+    - name: "smartshunt_best_battery_current"
+      unit_of_measurement: "A"
+      device_class: current
+      state_class: measurement
+      availability: >
+        {{
+          states('sensor.victron_unified_interface_smartshunt500a_ble_battery_current') not in ['unknown','unavailable']
+          or
+          states('sensor.victron_unified_interface_smartshunt500a_vd_battery_current') not in ['unknown','unavailable']
+        }}
+      state: >
+        {% set ble = states('sensor.victron_unified_interface_smartshunt500a_ble_battery_current') %}
+        {% set vd  = states('sensor.victron_unified_interface_smartshunt500a_vd_battery_current') %}
+
+        {% if ble not in ['unknown','unavailable'] %}
+          {{ ble | float | round(2) }}
+        {% elif vd not in ['unknown','unavailable'] %}
+          {{ vd | float | round(2) }}
+        {% else %}
+          {{ this.state }}
+        {% endif %}
+
+  
+    - name: "smartshunt_best_battery_power"
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+      state: >
+        {% set ble_p = states('sensor.victron_unified_interface_smartshunt500a_ble_battery_power') %}
+        {% set v = states('sensor.victron_unified_interface_smartshunt500a_vd_battery_voltage') | float(0) %}
+        {% set i = states('sensor.victron_unified_interface_smartshunt500a_vd_battery_current') | float(0) %}
+
+        {% if ble_p not in ['unknown','unavailable','None'] %}
+          {{ ble_p | float | round(0) }}
+        {% else %}
+          {{ (v * i) | round(0) }}
+        {% endif %}
+     
+    - name: "smartshunt_best_soc"
+      unit_of_measurement: "%"
+      device_class: battery
+      state_class: measurement
+      state: >
+        {% set ble = states('sensor.victron_unified_interface_smartshunt500a_ble_soc') %}
+        {% set vd  = states('sensor.victron_unified_interface_smartshunt500a_vd_soc') %}
+        {{ (ble if ble not in ['unknown','unavailable','None'] else vd) | float | round(1) }}  
+        
+    - name: "smartshunt_best_consumed_ah"
+      unit_of_measurement: "Ah"
+      state_class: measurement
+      state: >
+        {% set vd = states('sensor.victron_unified_interface_smartshunt500a_vd_consumed_ah') %}
+        {{ vd | float(0) }}        
