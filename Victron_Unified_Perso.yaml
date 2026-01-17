@@ -1,6 +1,7 @@
 #############################################
-# V5.0 – Unified BLE + VE.Direct Redundant
+# V5.1 – Unified BLE + VE.Direct Redundant
 # 2 MPPT (100/20 + 100/30)
+# 1 Smlartshunt 500A
 # Chaque MPPT : BLE + VE.Direct
 #############################################
 
@@ -41,6 +42,10 @@ substitutions:
   # BLE MPPT 100/30
   smart_10030_mac_address: !secret mppt100_30_mac
   smart_10030_encryption_key: !secret mppt100_30_key
+
+  # SmartShunt 500a
+  smartshunt500a_mac_address: !secret smartshunt500a_mac
+  smartshunt500a_encryption_key: !secret smartshunt500a_key
    
   api_encryption_key: !secret smartsolar2key
 
@@ -84,6 +89,9 @@ victron_ble:
     mac_address: ${smart_10030_mac_address}
     bindkey: ${smart_10030_encryption_key}
 
+  - id: smartshunt500a_ble
+    mac_address: ${smartshunt500a_mac_address}
+    bindkey: ${smartshunt500a_encryption_key}
 #############################################
 ### VE.Direct — Dual UART
 #############################################
@@ -103,6 +111,13 @@ uart:
     baud_rate: 19200
     rx_buffer_size: 256
 
+  # SmartShunt 500A VE.Direct
+  - id: uart_shunt500a
+    tx_pin: GPIO21      # NON CONNECTÉ
+    rx_pin: GPIO22      # TX du SmartShunt
+    baud_rate: 19200
+    rx_buffer_size: 256
+
 victron:
   - uart_id: uart_vedirect1
     id: mppt10020_vd
@@ -112,6 +127,9 @@ victron:
     id: mppt10030_vd
     throttle: 10s
 
+  - uart_id: uart_shunt500a
+    id: smartshunt500a_vd
+    throttle: 5s
 #############################################
 ### SENSOR DEFINITIONS – Unified Standard
 #############################################
@@ -128,7 +146,7 @@ sensor:
 
   - platform: victron_ble
     victron_ble_id: mppt10020_ble
-    name: "mppt10020_ble_battery_current"
+    name: "mppt10020_ble_panel_current"
     type: BATTERY_CURRENT
 
   - platform: victron_ble
@@ -176,7 +194,7 @@ sensor:
 
   - platform: victron_ble
     victron_ble_id: mppt10030_ble
-    name: "mppt10030_ble_battery_current"
+    name: "mppt10030_ble_panel_current"
     type: BATTERY_CURRENT
 
   - platform: victron_ble
@@ -193,6 +211,57 @@ sensor:
     victron_ble_id: mppt10030_ble
     name: "mppt10030_ble_error_code"
     type: CHARGER_ERROR
+
+  #################################################
+  # SmartShunt 500A BLE
+  #################################################
+
+  - platform: victron_ble
+    victron_ble_id: smartshunt500a_ble
+    id: smartshunt500a_ble_battery_voltage
+    name: "smartshunt500a_ble_battery_voltage"
+    type: BATTERY_VOLTAGE
+
+  - platform: victron_ble
+    victron_ble_id: smartshunt500a_ble
+    id: smartshunt500a_ble_battery_current
+    name: "smartshunt500a_ble_battery_current"
+    type: BATTERY_CURRENT
+
+  - platform: victron_ble
+    victron_ble_id: smartshunt500a_ble
+    id: smartshunt500a_ble_battery_power
+    name: "smartshunt500a_ble_battery_power"
+    type: BATTERY_POWER
+
+  - platform: victron_ble
+    victron_ble_id: smartshunt500a_ble
+    id: smartshunt500a_ble_soc
+    name: "smartshunt500a_ble_soc"
+    type: STATE_OF_CHARGE
+
+  #################################################
+  # SmartShunt 500A VE.Direct (fallback)
+  #################################################
+
+  - platform: victron
+    victron_id: smartshunt500a_vd
+    battery_voltage:
+      name: "smartshunt500a_vd_battery_voltage"
+      id: smartshunt500a_vd_battery_voltage
+      internal: true
+    battery_current:
+      name: "smartshunt500a_vd_battery_current"
+      id: smartshunt500a_vd_battery_current
+      internal: true
+    state_of_charge:
+      name: "smartshunt500a_vd_soc"
+      id: smartshunt500a_vd_soc
+      internal: true
+    consumed_amp_hours:
+      name: "smartshunt500a_vd_consumed_ah"
+      id: smartshunt500a_vd_consumed_ah
+      internal: true
 
   #################################################
   # MPPT 100/20 VE.Direct (avec id: ajoutés)
@@ -212,8 +281,8 @@ sensor:
       id: mppt10020_vd_battery_voltage
       internal: true
     battery_current:
-      name: "mppt10020_vd_battery_current"
-      id: mppt10020_vd_battery_current
+      name: "mppt10020_vd_panel_current"
+      id: mppt10020_vd_panel_current
       internal: true
     yield_today:
       name: "mppt10020_vd_yield_today"
@@ -269,7 +338,7 @@ sensor:
     battery_voltage:
       name: "mppt10030_vd_battery_voltage"
     battery_current:
-      name: "mppt10030_vd_battery_current"
+      name: "mppt10030_vd_panel_current"
     yield_today:
       name: "mppt10030_vd_yield_today"
     yield_yesterday:
@@ -291,10 +360,74 @@ sensor:
     load_current:
       name: "mppt10030_vd_load_current"
 
-  #################################################
-  # 🔁 Templates pour recréer les anciens sensors smartsolar1_esp_*
-  # (VE.Direct 100/20 uniquement)
-  #################################################
+#################################################
+# SmartShunt 500A – Unified templates (BLE + VE.Direct)
+#################################################
+
+
+  - platform: template
+    name: "smartshunt500a_battery_power"
+    device_class: power
+    unit_of_measurement: "W"
+    icon: "mdi:flash"
+    update_interval: 5s
+    lambda: |-
+      // Priorité BLE
+      if (!isnan(id(smartshunt500a_ble_battery_power).state))
+        return id(smartshunt500a_ble_battery_power).state;
+
+      // Fallback VE.Direct = V * I
+      if (!isnan(id(smartshunt500a_vd_battery_voltage).state) &&
+          !isnan(id(smartshunt500a_vd_battery_current).state))
+        return id(smartshunt500a_vd_battery_voltage).state *
+               id(smartshunt500a_vd_battery_current).state;
+
+      return NAN;
+
+  - platform: template
+    name: "smartshunt500a_consumed_ah"
+    device_class: energy
+    unit_of_measurement: "Ah"
+    icon: "mdi:battery-minus"
+    update_interval: 30s
+    lambda: |-
+      // BLE SmartShunt ne fournit pas toujours consumed_ah
+      // On privilégie VE.Direct (valeur de référence)
+      if (!isnan(id(smartshunt500a_vd_consumed_ah).state))
+        return id(smartshunt500a_vd_consumed_ah).state;
+      return NAN;
+      
+  - platform: template
+    name: "smartshunt500a_battery_voltage"
+    device_class: voltage
+    unit_of_measurement: "V"
+    update_interval: 5s
+    lambda: |-
+      if (!isnan(id(smartshunt500a_ble_battery_voltage).state))
+        return id(smartshunt500a_ble_battery_voltage).state;
+      return id(smartshunt500a_vd_battery_voltage).state;
+
+  - platform: template
+    name: "smartshunt500a_battery_current"
+    device_class: current
+    unit_of_measurement: "A"
+    icon: "mdi:current-dc"
+    update_interval: 5s
+    lambda: |-
+      if (!isnan(id(smartshunt500a_ble_battery_current).state))
+        return id(smartshunt500a_ble_battery_current).state;
+      return id(smartshunt500a_vd_battery_current).state;
+
+  - platform: template
+    name: "smartshunt500a_soc"
+    device_class: battery
+    unit_of_measurement: "%"
+    update_interval: 5s
+    icon: "mdi:battery-high"
+    lambda: |-
+      if (!isnan(id(smartshunt500a_ble_soc).state))
+        return id(smartshunt500a_ble_soc).state;
+      return id(smartshunt500a_vd_soc).state;
 
   - platform: template
     name: "smartsolar1_esp_battery_voltage"
@@ -305,12 +438,12 @@ sensor:
       return id(mppt10020_vd_battery_voltage).state;
 
   - platform: template
-    name: "smartsolar1_esp_battery_current"
-    id: smartsolar1_esp_battery_current
+    name: "smartsolar1_esp_panel_current"
+    id: smartsolar1_esp_panel_current
     update_interval: 10s
     unit_of_measurement: "A"
     lambda: |-
-      return id(mppt10020_vd_battery_current).state;
+      return id(mppt10020_vd_panel_current).state;
 
   - platform: template
     name: "smartsolar1_esp_panel_voltage"
@@ -340,7 +473,7 @@ sensor:
     name: "smartsolar1_esp_yield_today"
     id: smartsolar1_esp_yield_today
     update_interval: 60s
-    unit_of_measurement: "kWh"
+    unit_of_measurement: "Wh"
     lambda: |-
       return id(mppt10020_vd_yield_today).state;
 
@@ -348,7 +481,7 @@ sensor:
     name: "smartsolar1_esp_yield_yesterday"
     id: smartsolar1_esp_yield_yesterday
     update_interval: 60s
-    unit_of_measurement: "kWh"
+    unit_of_measurement: "Wh"
     lambda: |-
       return id(mppt10020_vd_yield_yesterday).state;
 
@@ -403,16 +536,6 @@ sensor:
     update_interval: 60s
     lambda: |-
       return id(mppt10020_vd_tracking_mode_id).state;
-
-  - platform: template
-    name: "smartsolar1_esp_panel_current"
-    id: smartsolar1_esp_panel_current
-    unit_of_measurement: "A"
-    update_interval: 10s
-    lambda: |-
-      // Correspond au comportement de l'ancien code : panel_current = battery_current
-      return id(mppt10020_vd_battery_current).state;
-
 
 #############################################
 ### TEXT SENSORS
