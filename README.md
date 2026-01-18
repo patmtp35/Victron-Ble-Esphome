@@ -1,127 +1,174 @@
-# Victron Unified ESP – SmartSolar BLE + VE.Direct (Fallback Auto)
+Victron Unified ESP – BLE + VE.Direct redondant
 
-ATTENTION VERSION Perso adaptée a mes besoins
+2× SmartSolar MPPT (100/20 + 100/30) + SmartShunt 500A
 
-Projet ESPHome permettant de lire simultanément les données de contrôleurs de charge **Victron SmartSolar MPPT** via :
+⚠️ VERSION PERSONNELLE – adaptée à mes besoins
+Ce projet n’est pas un template générique, mais une configuration ESPHome avancée, pensée pour la résilience, la continuité de service et la compatibilité Home Assistant existante.
 
-- **Bluetooth Low Energy (BLE)**  
-- **VE.Direct (UART)**  
-- **Fallback automatique VE.Direct → BLE** si l’une des deux sources tombe  
-- **Normalisation des noms d’entités Home Assistant**  
-- **Templates BEST** pour regrouper automatiquement la meilleure donnée  
-- **Dashboard Lovelace complet**
+📌 Description
 
-Attention en BLE on a pas toutes les remontées comme en VE-direct , ceci etant on a le minimum vital pour assuré la continuité.
+Projet ESPHome permettant de lire simultanément et en parallèle les données Victron via :
 
-Compatible avec :
+Bluetooth Low Energy (BLE)
 
-- MPPT **100/20**
-- MPPT **100/30**
-- ESP32 (2× UART + BLE)
-- Home Assistant + ESPHome
+VE.Direct (UART)
 
----
+Redondance automatique BLE ↔ VE.Direct selon la disponibilité
 
-## ✨ Fonctionnalités principales
+Normalisation et compatibilité rétro Home Assistant
 
-### ✔ Télémetrie complète Victron BLE  
-Récupération en direct via BLE :
-- Tension batterie
-- Courant batterie
-- Puissance PV
-- Tension PV
-- Courant Load
-- Température
-- Yield today
+Templates unifiés (“BEST source”) pour exposer la meilleure donnée
 
-### ✔ Télémetrie complète VE.Direct  
-Lecture fiabilisée par UART :
-- Panel voltage/power
-- Battery voltage/current
-- Load current
-- Yield total
-- Yield yesterday/today
-- Max power today/yesterday
-- Tracking mode
-- Error code
+Support multi-MPPT + SmartShunt sur un seul ESP32
 
-### ✔ Fallback automatique (BEST)  
-Chaque donnée critique possède :
+⚠️ En BLE, Victron ne fournit pas toutes les métriques disponibles en VE.Direct.
+Le BLE est utilisé comme source rapide et redondante, le VE.Direct comme référence complète et stable.
 
-➡ **BEST = VE.Direct priorité, BLE en secours**
+🔧 Matériel compatible
 
-#### connexions 
+Victron SmartSolar MPPT 100/20
 
-câblage DOUBLE VE.Direct pour connecter deux MPPT Victron (100/20 + 100/30) sur un seul ESP32, de manière propre, sûre et 100 % fonctionnelle pour ESPHome.
+Victron SmartSolar MPPT 100/30
+
+Victron SmartShunt 500A
+
+ESP32 (BLE + 3 UART)
+
+Home Assistant + ESPHome
+
+✨ Fonctionnalités principales
+✔ Télémetrie BLE (temps réel)
+
+Lecture directe via BLE :
+
+Tension batterie
+
+Courant batterie
+
+Puissance batterie / PV
+
+Tension panneau
+
+Courant Load
+
+Température MPPT
+
+Production du jour (Yield today)
+
+SOC (SmartShunt)
+
+👉 BLE = rapide, sans fil, mais jeu de données partiel
+
+✔ Télémetrie VE.Direct (complète & fiable)
+
+Lecture UART VE.Direct :
+
+Panel voltage / power
+
+Battery voltage / current
+
+Load current
+
+Yield today / yesterday / total
+
+Max power today / yesterday
+
+Charging mode / tracking mode
+
+Error codes
+
+Firmware, type d’appareil, numéro de série
+
+Consumed Ah (SmartShunt)
+
+👉 VE.Direct = référence complète, historique fiable
+
+✔ Redondance automatique (BEST source)
+
+Les capteurs critiques utilisent des templates intelligents :
+
+Priorité BLE si disponible
+
+Fallback VE.Direct automatique si BLE absent ou invalide
+
+Calculs de secours (ex: puissance = V × I si nécessaire)
+
+➡️ Aucune interruption côté Home Assistant
+➡️ Les dashboards et automatisations restent stables
+
+🧠 Architecture générale
+
+BLE actif en permanence (MPPT + SmartShunt)
+
+3 UART dédiés, un par appareil VE.Direct
+
+Aucun partage d’UART (protocole VE.Direct half-duplex)
+
+Les capteurs VE.Direct sont majoritairement internal
+
+Les entités exposées HA sont unifiées et stables
+
+🔌 Câblage VE.Direct (double MPPT + SmartShunt)
 
 🎯 Objectif :
+Connecter 2 MPPT + 1 SmartShunt sur un seul ESP32, proprement et sans conflit.
 
-MPPT 100/20 → UART2
+🔥 Règle essentielle
 
-MPPT 100/30 → UART1
+❌ Impossible de partager un UART entre deux VE.Direct
+✔ Chaque appareil Victron = son propre UART
 
-BLE toujours actif en parallèle
+📍 Mapping UART réel (aligné avec le code)
+Appareil	RX ESP32	TX ESP32	UART
+MPPT 100/20	GPIO19	GPIO18 (NC)	UART
+MPPT 100/30	GPIO16	GPIO17 (NC)	UART
+SmartShunt 500A	GPIO22	GPIO21 (NC)	UART
 
-Fallback BEST qui utilisera VE.Direct → BLE
+✔ TX Victron → RX ESP32
+✔ TX ESP32 non utilisé
+✔ Masse commune (GND) obligatoire
+✔ Câbles courts, torsadés recommandés
 
-🟦 1. Schéma général 
+🧩 Schéma logique simplifié
++-----------------------+
+|        ESP32          |
+|                       |
+| UART RX19  ← MPPT100/20
+| UART RX16  ← MPPT100/30
+| UART RX22  ← SmartShunt
+|                       |
++-----------------------+
+        |      |      |
+       GND    GND    GND
 
-🔥 IMPORTANT : chaque MPPT doit avoir son propre UART.
+🧩 Home Assistant & compatibilité
 
-On ne peut PAS partager un même UART entre 2 VE.Direct (protocol simple half-duplex).
+Les anciens capteurs smartsolar1_esp_* sont recréés via templates
 
-Donc :
+Aucun dashboard ou automation existant n’est cassé
 
-MPPT	ESP32 Pin	UART
-SmartSolar 100/20	GPIO 16 (RX2)	UART2
-SmartSolar 100/30	GPIO 4 (RX1)	UART1
-Masse commune	GND	-
-🟦 2. Schéma visuel détaillé
-               +---------------------------+
-               |         ESP32             |
-               |                           |
-               |   UART2          UART1    |
-               |   ------         ------   |
-               |  RX2 = 16       RX1 = 4   |
-               |  TX2 = 17 (NC)  TX1 = 5(NC)|
-               |                           |
-               +---------------------------+
-                     |                |
-                     |                |
-      +--------------+                +--------------+
-      |                                              |
-      |                                              |
-+-----------+                                  +-----------+
-| MPPT      |                                  | MPPT      |
-| 100/20    |                                  | 100/30    |
-|           |                                  |           |
-| VE.Direct |                                  | VE.Direct |
-|   TX ---- +---------------------------------> RX1 (GPIO4)  
-|   GND ---+-----> GND                          GND ----> GND
-|           |                                  |           |
-| (RX NC)   |                                  | (RX NC)   |
-+-----------+                                  +-----------+
+Les nouvelles entités BLE / VE.Direct peuvent coexister
 
+Bouton restart conservé pour compatibilité
 
+🧪 Philosophie du projet
 
-✔ TX du MPPT va toujours vers RX du ESP32
-✔ Les pins TX du ESP ne sont pas utilisés
-✔ Une seule masse commune pour tout le montage
-✔ Distances courtes, câble torsadé recommandé
+Résilience avant tout
 
-🟦 3. Pins conseillés pour ESP32 (DevKit v1)
-UART	RX Pin	TX Pin	Utilisation
-UART2	GPIO 16	GPIO 17	MPPT 100/20
-UART1	GPIO 4	GPIO 5	MPPT 100/30
+Pas de dépendance à une seule techno
 
-Les pins 4 et 5 sont parfaitement compatibles avec UART1 et disponibles sans conflit.
+BLE = continuité
 
-🤝 Contributeurs & Ressources
+VE.Direct = précision
 
-ESPHOME Victron BLE – Fabian Schmidt
+ESPHome lisible, maintenable, évolutif
+
+🤝 Ressources & crédits
+
+ESPHome Victron BLE – Fabian Schmidt
 https://github.com/Fabian-Schmidt/esphome-victron_ble
 
-ESPHOME Victron VE.Direct – KinDR007
+ESPHome Victron VE.Direct – KinDR007
 https://github.com/KinDR007/VictronMPPT-ESPHOME
 
-Merci à eux pour le travail de base sur lequel repose ce projet. 
+🙏 Merci à eux pour le travail fondamental sur lequel repose ce projet.
