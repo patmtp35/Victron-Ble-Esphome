@@ -1,8 +1,9 @@
 #############################################
 # V5.1 – Unified BLE + VE.Direct Redundant
 # 2 MPPT (100/20 + 100/30)
-# 1 Smlartshunt 500A
-# Chaque MPPT : BLE + VE.Direct
+# 1 smartshunt 500A
+# Chaque MPPT : BLE + VE.
+# SmartShunt Ble + Ve.Direct
 #############################################
 
 substitutions:
@@ -363,7 +364,19 @@ sensor:
 #################################################
 # SmartShunt 500A – Unified templates (BLE + VE.Direct)
 #################################################
+  - platform: template
+    name: "DEBUG smartshunt BLE current raw"
+    unit_of_measurement: "A"
+    update_interval: 5s
+    lambda: |-
+      return id(smartshunt500a_ble_battery_current).state;
 
+  - platform: template
+    name: "DEBUG smartshunt VE.Direct current raw"
+    unit_of_measurement: "A"
+    update_interval: 5s
+    lambda: |-
+      return id(smartshunt500a_vd_battery_current).state;
 
   - platform: template
     name: "smartshunt500a_battery_power"
@@ -372,9 +385,9 @@ sensor:
     icon: "mdi:flash"
     update_interval: 5s
     lambda: |-
-      // Priorité BLE
+      // Priorité BLE (⚠️ correction signe)
       if (!isnan(id(smartshunt500a_ble_battery_power).state))
-        return id(smartshunt500a_ble_battery_power).state;
+        return -id(smartshunt500a_ble_battery_power).state;
 
       // Fallback VE.Direct = V * I
       if (!isnan(id(smartshunt500a_vd_battery_voltage).state) &&
@@ -386,13 +399,10 @@ sensor:
 
   - platform: template
     name: "smartshunt500a_consumed_ah"
-    device_class: energy
     unit_of_measurement: "Ah"
     icon: "mdi:battery-minus"
     update_interval: 30s
     lambda: |-
-      // BLE SmartShunt ne fournit pas toujours consumed_ah
-      // On privilégie VE.Direct (valeur de référence)
       if (!isnan(id(smartshunt500a_vd_consumed_ah).state))
         return id(smartshunt500a_vd_consumed_ah).state;
       return NAN;
