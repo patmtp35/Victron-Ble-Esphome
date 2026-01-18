@@ -1,9 +1,7 @@
 #############################################
-# V5.1 – Unified BLE + VE.Direct Redundant
+# V5.0 – Unified BLE + VE.Direct Redundant
 # 2 MPPT (100/20 + 100/30)
-# 1 smartshunt 500A
-# Chaque MPPT : BLE + VE.
-# SmartShunt Ble + Ve.Direct
+# Chaque MPPT : BLE + VE.Direct
 #############################################
 
 substitutions:
@@ -241,28 +239,61 @@ sensor:
     name: "smartshunt500a_ble_soc"
     type: STATE_OF_CHARGE
 
-  #################################################
-  # SmartShunt 500A VE.Direct (fallback)
-  #################################################
+#################################################
+# SmartShunt 500A VE.Direct (étendu)
+#################################################
 
   - platform: victron
     victron_id: smartshunt500a_vd
+ 
     battery_voltage:
       name: "smartshunt500a_vd_battery_voltage"
       id: smartshunt500a_vd_battery_voltage
       internal: true
+
     battery_current:
       name: "smartshunt500a_vd_battery_current"
       id: smartshunt500a_vd_battery_current
       internal: true
+
+    instantaneous_power:
+      name: "smartshunt500a_vd_power"
+      id: smartshunt500a_vd_power
+      internal: true
+
+    battery_temperature:
+      name: "smartshunt500a_vd_battery_temperature"
+      internal: true
+
+    time_to_go:
+      name: "smartshunt500a_vd_time_to_go"
+      unit_of_measurement: "min"
+      internal: false   # 👈 exposé à Home Assistant
+
     state_of_charge:
       name: "smartshunt500a_vd_soc"
       id: smartshunt500a_vd_soc
       internal: true
+
     consumed_amp_hours:
       name: "smartshunt500a_vd_consumed_ah"
       id: smartshunt500a_vd_consumed_ah
       internal: true
+
+    amount_of_discharged_energy:
+      name: "smartshunt500a_vd_energy_discharged"
+      unit_of_measurement: "kWh"
+      internal: true
+
+    amount_of_charged_energy:
+      name: "smartshunt500a_vd_energy_charged"
+      unit_of_measurement: "kWh"
+      internal: true
+
+    number_of_charge_cycles:
+      name: "smartshunt500a_vd_charge_cycles"
+      internal: true
+
 
   #################################################
   # MPPT 100/20 VE.Direct (avec id: ajoutés)
