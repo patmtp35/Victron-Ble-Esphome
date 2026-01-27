@@ -82,8 +82,8 @@ mqtt:
   broker: 192.168.3.5
   port: 1883
   discovery: false
-  username: admin
-  password: 170671pf!
+  username: !secret mqttuser
+  password: !secret mqttpwd
 #############################################
 ### BLE TRACKER + BLE DEVICES
 #############################################

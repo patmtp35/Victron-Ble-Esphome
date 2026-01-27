@@ -1,174 +1,205 @@
-Victron Unified ESP – BLE + VE.Direct redondant
+# Victron Unified ESP  
+**BLE + VE.Direct redondant → Venus OS Ready (ESS via MQTT)**
 
-2× SmartSolar MPPT (100/20 + 100/30) + SmartShunt 500A
+2× SmartSolar MPPT (100/20 + 100/30) + SmartShunt 500A  
+ESP32 unique – multi-sources – haute résilience
 
-⚠️ VERSION PERSONNELLE – adaptée à mes besoins
-Ce projet n’est pas un template générique, mais une configuration ESPHome avancée, pensée pour la résilience, la continuité de service et la compatibilité Home Assistant existante.
+---
 
-📌 Description
+## ⚠️ Avertissement
 
-Projet ESPHome permettant de lire simultanément et en parallèle les données Victron via :
+Projet personnel avancé, conçu pour un système Victron réel.  
+Ce dépôt **n’est pas un template universel**, mais une configuration ESPHome :
 
-Bluetooth Low Energy (BLE)
+- orientée **résilience**
+- compatible **Home Assistant existant**
+- et désormais **compatible Venus OS / ESS via MQTT**
 
-VE.Direct (UART)
+Les versions **V5.x et V6.0 coexistent** et sont **toutes fonctionnelles**.
 
-Redondance automatique BLE ↔ VE.Direct selon la disponibilité
+---
 
-Normalisation et compatibilité rétro Home Assistant
+## 📌 Description générale
 
-Templates unifiés (“BEST source”) pour exposer la meilleure donnée
+Projet ESPHome permettant de lire **simultanément et en parallèle** les données Victron via :
 
-Support multi-MPPT + SmartShunt sur un seul ESP32
+- **Bluetooth Low Energy (BLE)**
+- **VE.Direct (UART)**
+- **MQTT (Venus OS / ESS – à partir de la V6.0)**
 
-⚠️ En BLE, Victron ne fournit pas toutes les métriques disponibles en VE.Direct.
-Le BLE est utilisé comme source rapide et redondante, le VE.Direct comme référence complète et stable.
+Objectifs :
+- Redondance automatique BLE ↔ VE.Direct
+- Continuité de service Home Assistant
+- Préparation native à une intégration **Venus OS (ESS, DVCC)**
 
-🔧 Matériel compatible
+---
 
-Victron SmartSolar MPPT 100/20
+## 🧱 Versions du projet
 
-Victron SmartSolar MPPT 100/30
+### 🔵 V5.x — BLE + VE.Direct redondant (stable)
+✔ Fonctionnelle  
+✔ Utilisée en production  
+✔ Orientée Home Assistant  
 
-Victron SmartShunt 500A
+Fonctionnalités :
+- Lecture BLE + VE.Direct simultanée
+- Templates unifiés (priorité BLE, fallback VE.Direct)
+- Compatibilité rétro Home Assistant (anciens capteurs conservés)
+- Redondance automatique sans coupure
 
-ESP32 (BLE + 3 UART)
+👉 **Version recommandée si tu n’utilises PAS Venus OS**
 
-Home Assistant + ESPHome
+---
 
-✨ Fonctionnalités principales
-✔ Télémetrie BLE (temps réel)
+### 🟢 V6.0 — Venus OS Ready (ESS via MQTT)
+✔ Fonctionnelle  
+✔ Compatible **Venus OS / ESS / DVCC**  
+✔ Toujours compatible Home Assistant  
 
-Lecture directe via BLE :
+**Nouveautés V6.0 :**
+- Publication MQTT conforme à l’arborescence Victron GX
+- SmartShunt ESP vu comme *Battery Monitor*
+- MPPT ESP vus comme *Solar Chargers*
+- Pilotage ESS :
+  - Mode ESS
+  - Limites de courant MPPT
+  - Autorisation charge / décharge (DVCC)
+  - Power setpoint batterie
+- Aucune dépendance à dbus direct → **MQTT only**
 
-Tension batterie
+👉 **Version recommandée si tu prévois d’installer Venus OS**
 
-Courant batterie
+---
 
-Puissance batterie / PV
+## 🔧 Matériel compatible
 
-Tension panneau
+- Victron SmartSolar MPPT 100/20
+- Victron SmartSolar MPPT 100/30
+- Victron SmartShunt 500A
+- ESP32 (BLE + ≥3 UART)
+- Home Assistant + ESPHome
+- *(optionnel)* Raspberry Pi + Venus OS
 
-Courant Load
+---
 
-Température MPPT
+## ✨ Fonctionnalités détaillées
 
-Production du jour (Yield today)
+### ✔ Télémetrie BLE (rapide & redondante)
 
-SOC (SmartShunt)
+Données disponibles :
+- Tension batterie
+- Courant batterie
+- Puissance batterie / PV
+- Tension panneau
+- Courant Load
+- Température MPPT
+- Production du jour
+- SOC (SmartShunt)
 
-👉 BLE = rapide, sans fil, mais jeu de données partiel
+👉 BLE = **rapide, sans fil, mais données partielles**
 
-✔ Télémetrie VE.Direct (complète & fiable)
+---
 
-Lecture UART VE.Direct :
+### ✔ Télémetrie VE.Direct (complète & fiable)
 
-Panel voltage / power
+Données disponibles :
+- Panel voltage / power
+- Battery voltage / current
+- Load current
+- Yield today / yesterday / total
+- Max power today / yesterday
+- Charging mode / tracking mode
+- Codes erreur
+- Firmware, type, numéro de série
+- Consumed Ah (SmartShunt)
 
-Battery voltage / current
+👉 VE.Direct = **référence principale**
 
-Load current
+---
 
-Yield today / yesterday / total
-
-Max power today / yesterday
-
-Charging mode / tracking mode
-
-Error codes
-
-Firmware, type d’appareil, numéro de série
-
-Consumed Ah (SmartShunt)
-
-👉 VE.Direct = référence complète, historique fiable
-
-✔ Redondance automatique (BEST source)
+### ✔ Redondance automatique (BEST source)
 
 Les capteurs critiques utilisent des templates intelligents :
+- Priorité BLE si disponible
+- Fallback VE.Direct automatique
+- Calculs de secours (V × I)
 
-Priorité BLE si disponible
+➡️ Aucune coupure Home Assistant  
+➡️ Dashboards et automatisations inchangés
 
-Fallback VE.Direct automatique si BLE absent ou invalide
+---
 
-Calculs de secours (ex: puissance = V × I si nécessaire)
+### ✔ MQTT Victron GX (V6.0)
 
-➡️ Aucune interruption côté Home Assistant
-➡️ Les dashboards et automatisations restent stables
+Publication conforme :
+- `N/ESP/system/0/Dc/Battery/*`
+- `N/ESP/solarcharger/{0,1}/*`
 
-🧠 Architecture générale
+Résultat :
+- Venus OS détecte automatiquement :
+  - SmartShunt ESP
+  - MPPT 100/20 ESP
+  - MPPT 100/30 ESP
 
-BLE actif en permanence (MPPT + SmartShunt)
+👉 **Même structure qu’un Cerbo GX**
 
-3 UART dédiés, un par appareil VE.Direct
+---
 
-Aucun partage d’UART (protocole VE.Direct half-duplex)
+## 🧠 Architecture générale
 
-Les capteurs VE.Direct sont majoritairement internal
+- BLE actif en permanence
+- 3 UART dédiés (1 par appareil VE.Direct)
+- Aucun partage d’UART (half-duplex VE.Direct)
+- Capteurs VE.Direct majoritairement `internal`
+- Entités exposées Home Assistant stables et unifiées
 
-Les entités exposées HA sont unifiées et stables
+---
 
-🔌 Câblage VE.Direct (double MPPT + SmartShunt)
+## 🔌 Câblage VE.Direct  
+### (2 MPPT + 1 SmartShunt)
 
-🎯 Objectif :
-Connecter 2 MPPT + 1 SmartShunt sur un seul ESP32, proprement et sans conflit.
+### Règle essentielle
+❌ Impossible de partager un UART  
+✔ 1 appareil Victron = 1 UART
 
-🔥 Règle essentielle
+| Appareil | RX ESP32 | TX ESP32 | UART |
+|--------|---------|---------|------|
+| MPPT 100/20 | GPIO19 | GPIO18 (NC) | UART |
+| MPPT 100/30 | GPIO16 | GPIO17 (NC) | UART |
+| SmartShunt 500A | GPIO22 | GPIO21 (NC) | UART |
 
-❌ Impossible de partager un UART entre deux VE.Direct
-✔ Chaque appareil Victron = son propre UART
+- TX Victron → RX ESP32
+- TX ESP32 non utilisé
+- Masse commune obligatoire
 
-📍 Mapping UART réel (aligné avec le code)
-Appareil	RX ESP32	TX ESP32	UART
-MPPT 100/20	GPIO19	GPIO18 (NC)	UART
-MPPT 100/30	GPIO16	GPIO17 (NC)	UART
-SmartShunt 500A	GPIO22	GPIO21 (NC)	UART
+---
 
-✔ TX Victron → RX ESP32
-✔ TX ESP32 non utilisé
-✔ Masse commune (GND) obligatoire
-✔ Câbles courts, torsadés recommandés
+## 🧩 Home Assistant & compatibilité
 
-🧩 Schéma logique simplifié
-+-----------------------+
-|        ESP32          |
-|                       |
-| UART RX19  ← MPPT100/20
-| UART RX16  ← MPPT100/30
-| UART RX22  ← SmartShunt
-|                       |
-+-----------------------+
-        |      |      |
-       GND    GND    GND
+- Anciens capteurs `smartsolar1_esp_*` recréés via templates
+- Aucun dashboard cassé
+- BLE, VE.Direct et MQTT coexistent
+- Bouton restart conservé
 
-🧩 Home Assistant & compatibilité
+---
 
-Les anciens capteurs smartsolar1_esp_* sont recréés via templates
+## 🧪 Philosophie du projet
 
-Aucun dashboard ou automation existant n’est cassé
+- Résilience avant tout
+- Pas de dépendance à une seule technologie
+- BLE = continuité
+- VE.Direct = précision
+- MQTT = intégration système (ESS)
+- ESPHome lisible, maintenable, évolutif
 
-Les nouvelles entités BLE / VE.Direct peuvent coexister
+---
 
-Bouton restart conservé pour compatibilité
+## 🤝 Ressources & crédits
 
-🧪 Philosophie du projet
+- ESPHome Victron BLE – Fabian Schmidt  
+  https://github.com/Fabian-Schmidt/esphome-victron_ble
 
-Résilience avant tout
-
-Pas de dépendance à une seule techno
-
-BLE = continuité
-
-VE.Direct = précision
-
-ESPHome lisible, maintenable, évolutif
-
-🤝 Ressources & crédits
-
-ESPHome Victron BLE – Fabian Schmidt
-https://github.com/Fabian-Schmidt/esphome-victron_ble
-
-ESPHome Victron VE.Direct – KinDR007
-https://github.com/KinDR007/VictronMPPT-ESPHOME
+- ESPHome Victron VE.Direct – KinDR007  
+  https://github.com/KinDR007/VictronMPPT-ESPHOME
 
 🙏 Merci à eux pour le travail fondamental sur lequel repose ce projet.
