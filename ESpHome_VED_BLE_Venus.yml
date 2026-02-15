@@ -35,7 +35,7 @@ substitutions:
 
   time_id: ha_time
   time_platform: homeassistant
-
+  
   # BLE MPPT 100/20
   smart_10020_mac_address: !secret mppt100_20_mac
   smart_10020_encryption_key: !secret mppt100_20_key
@@ -47,9 +47,11 @@ substitutions:
   # SmartShunt 500a
   smartshunt500a_mac_address: !secret smartshunt500a_mac
   smartshunt500a_encryption_key: !secret smartshunt500a_key
-   
-  api_encryption_key: !secret smartsolar2key
+  battery_installed_capacity_ah: "300"
 
+  api_encryption_key: !secret smartsolar2key
+  
+  venus_portal_id: !secret venus_portal_id
 #############################################
 ### ESP32 definition
 #############################################
@@ -76,14 +78,111 @@ external_components:
     refresh: 0s
 
 #############################################
+### TIMER
+#############################################
+time:
+  - platform: homeassistant
+    id: ha_time
+    on_time:
+      - seconds: 0
+        minutes: 0
+        hours: 0
+        then:
+          - lambda: |-
+              // ---------- MPPT 100/20 ----------
+              id(mppt10020_yield_yesterday) =
+                id(mppt10020_yield_today_wh) / 1000.0f;
+
+              id(mppt10020_yield_lifetime) +=
+                id(mppt10020_yield_yesterday);
+
+              id(mppt10020_yield_today_wh) = 0;
+              id(mppt10020_time_bulk) = 0;
+              id(mppt10020_time_abs) = 0;
+              id(mppt10020_time_float) = 0;
+              id(mppt10020_max_power_today) = 0;
+              id(mppt10020_last_state) = 0;
+              id(mppt10020_last_ts) = 0;
+
+              // ---------- MPPT 100/30 ----------
+              id(mppt10030_yield_yesterday) =
+                id(mppt10030_yield_today_wh) / 1000.0f;
+
+              id(mppt10030_yield_lifetime) +=
+                id(mppt10030_yield_yesterday);
+
+              id(mppt10030_yield_today_wh) = 0;
+              id(mppt10030_time_bulk) = 0;
+              id(mppt10030_time_abs) = 0;
+              id(mppt10030_time_float) = 0;
+              id(mppt10030_max_power_today) = 0;
+              id(mppt10030_last_state) = 0;
+              id(mppt10030_last_ts) = 0;
+
+#############################################
 ### MQTT DU VENUS OS
 #############################################
+
 mqtt:
-  broker: 192.168.3.5
+  broker: 192.168.3.248
   port: 1883
   discovery: false
-  username: !secret mqttuser
-  password: !secret mqttpwd
+  #log_topic: null
+  client_id: victron_unified
+
+  will_message:
+    topic: device/victron_unified/Status
+    payload: |-
+      {
+        "clientId": "victron_unified",
+        "connected": 0,
+        "services": {
+          "battery1": "battery"
+        }
+      }
+
+  on_connect:
+    then:
+      - mqtt.publish:
+          topic: device/victron_unified/Status
+          retain: true
+          payload: |-
+            {
+              "clientId": "victron_unified",
+              "connected": 1,
+              "version": "6.0.0",
+              "services": {
+                "battery1": "battery"
+              }
+            }
+
+  on_message:
+    - topic: device/victron_unified/DBus
+      then:
+        - lambda: |-
+            JsonDocument doc;
+            auto err = deserializeJson(doc, x);
+            if (err) {
+              ESP_LOGW("mqtt", "DBus JSON parse failed");
+              return;
+            }
+
+            /* ---------- portalId ---------- */
+            if (doc["portalId"].is<const char*>()) {
+              id(venus_portal_id) = doc["portalId"].as<const char*>();
+              ESP_LOGI("mqtt", "PortalId: %s", id(venus_portal_id).c_str());
+            }
+
+            /* ---------- topicPath ---------- */
+            if (doc["topicPath"].is<JsonObject>()) {
+              JsonObject tp = doc["topicPath"];
+
+              if (tp["battery1"]["W"].is<const char*>()) {
+                id(battery_topic_w) = tp["battery1"]["W"].as<const char*>();
+                ESP_LOGI("mqtt", "Battery W topic: %s", id(battery_topic_w).c_str());
+              }
+            }
+
 #############################################
 ### BLE TRACKER + BLE DEVICES
 #############################################
@@ -102,6 +201,7 @@ victron_ble:
   - id: smartshunt500a_ble
     mac_address: ${smartshunt500a_mac_address}
     bindkey: ${smartshunt500a_encryption_key}
+
 #############################################
 ### VE.Direct — Dual UART
 #############################################
@@ -140,6 +240,140 @@ victron:
   - uart_id: uart_shunt500a
     id: smartshunt500a_vd
     throttle: 5s
+
+globals:
+  - id: venus_portal_id
+    type: std::string
+    initial_value: '""'
+
+  - id: battery_instance
+    type: int
+    initial_value: '-1'
+
+  - id: mppt10020_instance
+    type: int
+    initial_value: '-1'
+
+  - id: mppt10030_instance
+    type: int
+    initial_value: '-1'
+
+  - id: battery_topic_w
+    type: std::string
+    initial_value: ""
+
+  - id: mppt10020_topic_w
+    type: std::string
+    initial_value: ""
+
+  - id: mppt10030_topic_w
+    type: std::string
+    initial_value: ""
+  
+  - id: shunt_topic_w
+    type: std::string
+    initial_value: ""
+
+  - id: shunt_productid_sent
+    type: bool
+    initial_value: "false"  
+
+  - id: mppt10020_productid_sent
+    type: bool
+    initial_value: "false"
+
+  - id: mppt10030_productid_sent
+    type: bool
+    initial_value: "false"    
+
+  # MPPT 100/20 timers
+  - id: mppt10020_last_state
+    type: int
+    initial_value: '0'
+  - id: mppt10020_last_ts
+    type: uint32_t
+    initial_value: '0'
+  - id: mppt10020_time_bulk
+    type: uint32_t
+    initial_value: '0'
+  - id: mppt10020_time_abs
+    type: uint32_t
+    initial_value: '0'
+  - id: mppt10020_time_float
+    type: uint32_t
+    initial_value: '0'
+
+  # MPPT 100/30 timers
+  - id: mppt10030_last_state
+    type: int
+    initial_value: '0'
+  - id: mppt10030_last_ts
+    type: uint32_t
+    initial_value: '0'
+  - id: mppt10030_time_bulk
+    type: uint32_t
+    restore_value: true
+    initial_value: '0'
+  - id: mppt10030_time_abs
+    type: uint32_t
+    restore_value: true
+    initial_value: '0'
+  - id: mppt10030_time_float
+    type: uint32_t
+    restore_value: true
+    initial_value: '0'    
+    
+   # MaxPower Today
+  - id: mppt10020_max_power_today
+    type: float
+    initial_value: '0.0'
+
+  - id: mppt10030_max_power_today
+    type: float
+    initial_value: '0.0'   
+
+  # Yield Today (Wh cumulés depuis minuit)
+  - id: mppt10020_yield_today_wh
+    type: float
+    initial_value: '0.0'
+
+  - id: mppt10030_yield_today_wh
+    type: float
+    initial_value: '0.0'    
+
+  - id: mppt10020_yield_lifetime
+    type: float
+    restore_value: true
+    initial_value: '0.0'
+  - id: mppt10030_yield_lifetime
+    type: float
+    restore_value: true
+    initial_value: '0.0'
+
+  # Yield Yesterday (kWh)
+  - id: mppt10020_yield_yesterday
+    type: float
+    initial_value: '0.0'
+
+  - id: mppt10030_yield_yesterday
+    type: float
+    initial_value: '0.0'
+
+  # Max PV Voltage Today
+  - id: mppt10020_max_pv_voltage_today
+    type: float
+    initial_value: '0.0'
+
+  - id: mppt10030_max_pv_voltage_today
+    type: float
+    initial_value: '0.0'    
+  - id: battery_min_voltage_today
+    type: float
+    initial_value: '1000.0'
+
+  - id: battery_max_voltage_today
+    type: float
+    initial_value: '0.0'    
 #############################################
 ### SENSOR DEFINITIONS – Unified Standard
 #############################################
@@ -278,6 +512,7 @@ sensor:
 
     time_to_go:
       name: "smartshunt500a_vd_time_to_go"
+      id: smartshunt500a_vd_time_to_go
       unit_of_measurement: "min"
       internal: false   # 👈 exposé à Home Assistant
 
@@ -400,8 +635,10 @@ sensor:
       name: "mppt10030_vd_day_number"
     error_code:
       name: "mppt10030_vd_error_code"
+      id: mppt10030_vd_error_code
     charging_mode_id:
       name: "mppt10030_vd_charging_mode_id"
+      id: mppt10030_vd_charging_mode_id
     tracking_mode_id:
       name: "mppt10030_vd_tracking_mode_id"
     load_current:
@@ -426,6 +663,7 @@ sensor:
 
   - platform: template
     name: "smartshunt500a_battery_power"
+    id: smartshunt500a_battery_power
     device_class: power
     unit_of_measurement: "W"
     icon: "mdi:flash"
@@ -433,7 +671,7 @@ sensor:
     lambda: |-
       // Priorité BLE (⚠️ correction signe)
       if (!isnan(id(smartshunt500a_ble_battery_power).state))
-        return -id(smartshunt500a_ble_battery_power).state;
+        return id(smartshunt500a_ble_battery_power).state;
 
       // Fallback VE.Direct = V * I
       if (!isnan(id(smartshunt500a_vd_battery_voltage).state) &&
@@ -455,6 +693,7 @@ sensor:
       
   - platform: template
     name: "smartshunt500a_battery_voltage"
+    id: smartshunt500a_battery_voltage
     device_class: voltage
     unit_of_measurement: "V"
     update_interval: 5s
@@ -465,6 +704,7 @@ sensor:
 
   - platform: template
     name: "smartshunt500a_battery_current"
+    id: smartshunt500a_battery_current
     device_class: current
     unit_of_measurement: "A"
     icon: "mdi:current-dc"
@@ -476,6 +716,7 @@ sensor:
 
   - platform: template
     name: "smartshunt500a_soc"
+    id: smartshunt500a_soc
     device_class: battery
     unit_of_measurement: "%"
     update_interval: 5s
@@ -748,13 +989,13 @@ select:
       - "External control"
     set_action:
       - mqtt.publish:
-          topic: N/ESP/settings/0/Ess/Mode
+          topic: N/${venus_portal_id}/settings/0/Ess/Mode # <-- ID corrigé
           payload: !lambda |-
-            if (x == "Optimized") return "0";
-            if (x == "Optimized (no BatteryLife)") return "1";
-            if (x == "Keep charged") return "2";
-            if (x == "External control") return "3";
-            return "0";
+            if (x == "Optimized") return "{\"value\":0}";
+            if (x == "Optimized (no BatteryLife)") return "{\"value\":1}";
+            if (x == "Keep charged") return "{\"value\":2}";
+            if (x == "External control") return "{\"value\":3}";
+            return "{\"value\":0}";
 
 #############################################
 ### Numbers
@@ -769,8 +1010,9 @@ number:
     step: 0.5
     set_action:
       - mqtt.publish:
-          topic: N/ESP/solarcharger/0/Settings/ChargeCurrentLimit
-          payload: !lambda 'return to_string(x);'
+          topic: N/${venus_portal_id}/solarcharger/0/Settings/ChargeCurrentLimit # <-- ID corrigé
+          payload: !lambda |-
+            return std::string("{\"value\":") + to_string(x) + "}";
 
   - platform: template
     name: "ESS MPPT10030 Max Charge Current"
@@ -780,19 +1022,21 @@ number:
     step: 0.5
     set_action:
       - mqtt.publish:
-          topic: N/ESP/solarcharger/1/Settings/ChargeCurrentLimit
-          payload: !lambda 'return to_string(x);'
+          topic: N/${venus_portal_id}/solarcharger/1/Settings/ChargeCurrentLimit # <-- ID corrigé
+          payload: !lambda |-
+            return std::string("{\"value\":") + to_string(x) + "}";
 
   - platform: template
     name: "ESS Battery Power Setpoint"
     unit_of_measurement: "W"
-    min_value: -5000   # décharge
-    max_value: 5000    # charge
+    min_value: -5000
+    max_value: 5000
     step: 50
     set_action:
       - mqtt.publish:
-          topic: N/ESP/system/0/Dc/Battery/PowerSetpoint
-          payload: !lambda 'return to_string(x);'
+          topic: N/${venus_portal_id}/system/0/Dc/Battery/PowerSetpoint # <-- ID corrigé
+          payload: !lambda |-
+            return std::string("{\"value\":") + to_string(x) + "}";
 
   - platform: template
     name: "ESS Minimum SOC"
@@ -802,8 +1046,10 @@ number:
     step: 1
     set_action:
       - mqtt.publish:
-          topic: N/ESP/settings/0/Ess/MinimumSoc
-          payload: !lambda 'return to_string(x);'
+          topic: N/${venus_portal_id}/settings/0/Ess/MinimumSoc # <-- ID corrigé
+          payload: !lambda |-
+            return std::string("{\"value\":") + to_string(x) + "}";
+
 
 #############################################
 ### Switch
@@ -814,50 +1060,36 @@ switch:
     optimistic: true
     turn_on_action:
       - mqtt.publish:
-          topic: N/ESP/solarcharger/0/Mode
-          payload: "1"     # ON
+          topic: N/${venus_portal_id}/solarcharger/0/Mode # <-- ID corrigé
+          payload: '{"value":1}'
     turn_off_action:
       - mqtt.publish:
-          topic: N/ESP/solarcharger/0/Mode
-          payload: "4"     # OFF
+          topic: N/${venus_portal_id}/solarcharger/0/Mode
+          payload: '{"value":4}'
 
   - platform: template
     name: "ESS MPPT10030 Enable"
     optimistic: true
     turn_on_action:
       - mqtt.publish:
-          topic: N/ESP/solarcharger/1/Mode
-          payload: "1"
+          topic: N/${venus_portal_id}/solarcharger/1/Mode # <-- ID corrigé
+          payload: '{"value":1}'
     turn_off_action:
       - mqtt.publish:
-          topic: N/ESP/solarcharger/1/Mode
-          payload: "4"
+          topic: N/${venus_portal_id}/solarcharger/1/Mode
+          payload: '{"value":4}'
 
   - platform: template
     name: "ESS Allow Battery Charge"
     optimistic: true
     turn_on_action:
       - mqtt.publish:
-          topic: N/ESP/settings/0/Dvcc/AllowCharge
-          payload: "1"
+          topic: N/${venus_portal_id}/settings/0/Dvcc/AllowCharge # <-- ID corrigé
+          payload: '{"value":1}'
     turn_off_action:
       - mqtt.publish:
-          topic: N/ESP/settings/0/Dvcc/AllowCharge
-          payload: "0"
-
-  - platform: template
-    name: "ESS Allow Battery Discharge"
-    optimistic: true
-    turn_on_action:
-      - mqtt.publish:
-          topic: N/ESP/settings/0/Dvcc/AllowDischarge
-          payload: "1"
-    turn_off_action:
-      - mqtt.publish:
-          topic: N/ESP/settings/0/Dvcc/AllowDischarge
-          payload: "0"
-
-
+          topic: N/${venus_portal_id}/settings/0/Dvcc/AllowCharge
+          payload: '{"value":0}'
 #############################################
 ### BUTTONS
 #############################################
@@ -868,85 +1100,285 @@ button:
     name: "smartsolar1_esp_restart_esp"
     id: smartsolar1_esp_restart_esp
 
-
 interval:
+
+  # 🔋 Envoi des valeurs SmartShunt vers Venus
+  - interval: 5s
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return !id(battery_topic_w).empty();
+          then:
+            - mqtt.publish:
+                topic: device/victron_unified/Proxy
+                payload: !lambda |-
+                  JsonDocument doc;
+                  doc["topicPath"] = id(battery_topic_w);
+
+                  JsonObject v = doc["values"].to<JsonObject>();
+                  //JsonObject v = doc.createNestedObject("values");
+                  float vb = id(smartshunt500a_battery_voltage).state;
+                  if (!isnan(vb)) {
+                    if (vb < id(battery_min_voltage_today))
+                      id(battery_min_voltage_today) = vb;
+                    if (vb > id(battery_max_voltage_today))
+                      id(battery_max_voltage_today) = vb;
+                  }
+                  if (!isnan(id(smartshunt500a_battery_voltage).state))
+                    v["Dc/0/Voltage"] = id(smartshunt500a_battery_voltage).state;
+  
+                  if (!isnan(id(smartshunt500a_battery_current).state))
+                    v["Dc/0/Current"] = id(smartshunt500a_battery_current).state;
+ 
+                  if (!isnan(id(smartshunt500a_battery_power).state))
+                    v["Dc/0/Power"] = id(smartshunt500a_battery_power).state;
+  
+                  if (!isnan(id(smartshunt500a_soc).state))
+                    v["Soc"] = id(smartshunt500a_soc).state;
+                  
+                  /* 🔋 Consumed Ah (Victron natif) */
+                  if (!isnan(id(smartshunt500a_vd_consumed_ah).state))
+                  v["ConsumedAh"] = id(smartshunt500a_vd_consumed_ah).state;
+                  
+                  // 🔋 Capacité installée (OBLIGATOIRE pour GX)
+                  v["InstalledCapacity"] = ${battery_installed_capacity_ah};
+                  
+                  // 🔋 Battery Min / Max Voltage Today (GX history-like)
+                  if (id(battery_min_voltage_today) < 1000.0)
+                    v["History/Daily/0/MinVoltage"] = id(battery_min_voltage_today);
+
+                  if (id(battery_max_voltage_today) > 0.0)
+                    v["History/Daily/0/MaxVoltage"] = id(battery_max_voltage_today);
+
+                  // ⏱️ Time To Go (MINUTES)
+                  if (!isnan(id(smartshunt500a_vd_time_to_go).state) &&
+                      id(smartshunt500a_vd_time_to_go).state > 0) {
+                    v["TimeToGo"] =
+                      (int) id(smartshunt500a_vd_time_to_go).state;
+                  }  
+
+                  std::string out;
+                  serializeJson(doc, out);
+                  return out;
+                qos: 0
+                retain: false
+
+  # ❤️ Keepalive GX (OBLIGATOIRE)
+  - interval: 40s
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return !id(venus_portal_id).empty();
+          then:
+            - mqtt.publish:
+                topic: !lambda |-
+                  return std::string("R/") + id(venus_portal_id) + "/keepalive";
+                payload: ""
+                qos: 0
+                retain: false
+
+  # 🟢 STATUS — déclaration du SmartShunt (LA PIÈCE QUI MANQUAIT)
+  - interval: 30s
+    then:
+      - mqtt.publish:
+          topic: device/victron_unified/Status
+          payload: |-
+            {
+              "clientId": "victron_unified",
+              "connected": 1,
+              "version": "esp-smartshunt",
+              "services": {
+                "battery1": "battery"
+              }
+            }
+          qos: 0
+          retain: true
+##################################################################################
+# MPPT 100/20 → Venus OS
+##################################################################################
   - interval: 5s
     then:
       - mqtt.publish:
-          topic: N/ESP/system/0/Dc/Battery/Voltage
-          payload: !lambda 'return to_string(id(smartshunt500a_vd_battery_voltage).state);'
+          topic: venus/solarcharger/mppt_100_20
+          retain: true
+          payload: !lambda |-
+            JsonDocument doc;
+            uint32_t now = millis() / 1000;
 
-      - mqtt.publish:
-          topic: N/ESP/system/0/Dc/Battery/Current
-          payload: !lambda 'return to_string(id(smartshunt500a_vd_battery_current).state);'
+            // ---------------- PV Power ----------------
+            float pwr = NAN;
+            if (!isnan(id(mppt10020_vd_panel_power).state))
+              pwr = id(mppt10020_vd_panel_power).state;
 
-      - mqtt.publish:
-          topic: N/ESP/system/0/Dc/Battery/Power
-          payload: !lambda 'return to_string(id(smartshunt500a_vd_power).state);'
+            // ---------------- dt ----------------
+            uint32_t dt = 0;
+            if (id(mppt10020_last_ts) > 0 && now >= id(mppt10020_last_ts))
+              dt = now - id(mppt10020_last_ts);
 
-      - mqtt.publish:
-          topic: N/ESP/system/0/Dc/Battery/Soc
-          payload: !lambda 'return to_string(id(smartshunt500a_vd_soc).state);'
+            // ---------------- Yield Today (Wh) ----------------
+            if (dt > 0 && !isnan(pwr) && pwr >= 0)
+              id(mppt10020_yield_today_wh) += pwr * ((float)dt / 3600.0f);
 
-      - mqtt.publish:
-          topic: N/ESP/system/0/ServiceName
-          payload: "SmartShunt ESP"
+            // ---------------- MaxPower Today ----------------
+            if (!isnan(pwr) && pwr > id(mppt10020_max_power_today))
+              id(mppt10020_max_power_today) = pwr;
 
-      - mqtt.publish:
-          topic: N/ESP/system/0/DeviceInstance
-          payload: "0"
+            // ---------------- State mapping ----------------
+            int state = 1;
+            if (!isnan(id(mppt10020_vd_charging_mode_id).state)) {
+              int m = (int) id(mppt10020_vd_charging_mode_id).state;
+              if (m >= 3 && m <= 7) state = m;
+            }
 
+            // ---------------- Time accounting ----------------
+            if (dt > 0) {
+              switch (id(mppt10020_last_state)) {
+                case 3: id(mppt10020_time_bulk)  += dt; break;
+                case 4: id(mppt10020_time_abs)   += dt; break;
+                case 5: id(mppt10020_time_float) += dt; break;
+              }
+            }
 
-  - interval: 10s
+            id(mppt10020_last_state) = state;
+            id(mppt10020_last_ts) = now;
+
+            // ---------------- Max PV Voltage Today ----------------
+            if (!isnan(id(mppt10020_vd_panel_voltage).state) &&
+                id(mppt10020_vd_panel_voltage).state > id(mppt10020_max_pv_voltage_today))
+              id(mppt10020_max_pv_voltage_today) = id(mppt10020_vd_panel_voltage).state;
+
+            // ---------------- JSON payload ----------------
+            JsonObject pv = doc["Pv"].to<JsonObject>();
+            pv["V"] = id(mppt10020_vd_panel_voltage).state;
+
+            JsonObject y = doc["Yield"].to<JsonObject>();
+            y["Power"] = pwr;
+
+            JsonObject dc0 = doc["Dc"]["0"].to<JsonObject>();
+            dc0["Voltage"] = id(mppt10020_vd_battery_voltage).state;
+            dc0["Current"] = id(mppt10020_vd_panel_current).state;
+
+            JsonObject hist0 = doc["History"]["Daily"]["0"].to<JsonObject>();
+            hist0["Yield"] = id(mppt10020_yield_today_wh) / 1000.0f;
+            hist0["MaxPower"] = id(mppt10020_max_power_today);
+            hist0["MaxPvVoltage"] = id(mppt10020_max_pv_voltage_today);
+            hist0["TimeInBulk"] = id(mppt10020_time_bulk);
+            hist0["TimeInAbsorption"] = id(mppt10020_time_abs);
+            hist0["TimeInFloat"] = id(mppt10020_time_float);
+
+            JsonObject hist1 = doc["History"]["Daily"]["1"].to<JsonObject>();
+            hist1["Yield"] = id(mppt10020_yield_yesterday);
+
+            JsonObject overall = doc["History"]["Overall"].to<JsonObject>();
+            overall["DaysAvailable"] = 2;
+            overall["Yield"] = id(mppt10020_yield_lifetime);
+
+            JsonObject link = doc["Link"].to<JsonObject>();
+            link["NetworkStatus"] = "0x04";
+
+            JsonObject settings = doc["Settings"].to<JsonObject>();
+            settings["ChargeCurrentLimit"] = 20.0;
+
+            doc["Mode"] = 0;
+            if (!isnan(id(mppt10020_vd_error_code).state))
+              doc["ErrorCode"] = (int) id(mppt10020_vd_error_code).state;
+            else
+             doc["ErrorCode"] = 0;
+            doc["State"] = state;
+            doc["MppOperationMode"] = 2;
+
+            std::string out;
+            serializeJson(doc, out);
+            return out;
+
+##################################################################################
+# MPPT 100/30 → Venus OS
+##################################################################################
+  - interval: 5s
     then:
-      # -------- MPPT 100/20 --------
       - mqtt.publish:
-          topic: N/ESP/solarcharger/0/Pv/Power
-          payload: !lambda 'return to_string(id(mppt10020_vd_panel_power).state);'
+          topic: venus/solarcharger/mppt_100_30
+          retain: true
+          payload: !lambda |-
+            JsonDocument doc;
+            uint32_t now = millis() / 1000;
 
-      - mqtt.publish:
-          topic: N/ESP/solarcharger/0/Pv/Voltage
-          payload: !lambda 'return to_string(id(mppt10020_vd_panel_voltage).state);'
+            float pwr = NAN;
+            if (!isnan(id(mppt10030_vd_panel_power).state))
+              pwr = id(mppt10030_vd_panel_power).state;
 
-      - mqtt.publish:
-          topic: N/ESP/solarcharger/0/Dc/0/Voltage
-          payload: !lambda 'return to_string(id(mppt10020_vd_battery_voltage).state);'
+            uint32_t dt = 0;
+            if (id(mppt10030_last_ts) > 0 && now >= id(mppt10030_last_ts))
+              dt = now - id(mppt10030_last_ts);
 
-      - mqtt.publish:
-          topic: N/ESP/solarcharger/0/Dc/0/Current
-          payload: !lambda 'return to_string(id(mppt10020_vd_panel_current).state);'
+            if (dt > 0 && !isnan(pwr) && pwr >= 0)
+              id(mppt10030_yield_today_wh) += pwr * ((float)dt / 3600.0f);
 
-      - mqtt.publish:
-          topic: N/ESP/solarcharger/0/ServiceName
-          payload: "MPPT 100/20 ESP"
+            if (!isnan(pwr) && pwr > id(mppt10030_max_power_today))
+              id(mppt10030_max_power_today) = pwr;
 
-      - mqtt.publish:
-          topic: N/ESP/solarcharger/0/DeviceInstance
-          payload: "0"
+            int state = 1;
+            if (!isnan(id(mppt10030_vd_charging_mode_id).state)) {
+              int m = (int) id(mppt10030_vd_charging_mode_id).state;
+              if (m >= 3 && m <= 7) state = m;
+            }
 
-  - interval: 10s
-    then:
-      # -------- MPPT 100/30 --------
-      - mqtt.publish:
-          topic: N/ESP/solarcharger/1/Pv/Power
-          payload: !lambda 'return to_string(id(mppt10030_vd_panel_power).state);'
+            if (dt > 0) {
+              switch (id(mppt10030_last_state)) {
+                case 3: id(mppt10030_time_bulk)  += dt; break;
+                case 4: id(mppt10030_time_abs)   += dt; break;
+                case 5: id(mppt10030_time_float) += dt; break;
+              }
+            }
 
-      - mqtt.publish:
-          topic: N/ESP/solarcharger/1/Pv/Voltage
-          payload: !lambda 'return to_string(id(mppt10030_vd_panel_voltage).state);'
+            id(mppt10030_last_state) = state;
+            id(mppt10030_last_ts) = now;
 
-      - mqtt.publish:
-          topic: N/ESP/solarcharger/1/Dc/0/Voltage
-          payload: !lambda 'return to_string(id(mppt10030_vd_battery_voltage).state);'
+            if (!isnan(id(mppt10030_vd_panel_voltage).state) &&
+                id(mppt10030_vd_panel_voltage).state > id(mppt10030_max_pv_voltage_today))
+              id(mppt10030_max_pv_voltage_today) = id(mppt10030_vd_panel_voltage).state;
 
-      - mqtt.publish:
-          topic: N/ESP/solarcharger/1/Dc/0/Current
-          payload: !lambda 'return to_string(id(mppt10030_vd_panel_current).state);'
+            JsonObject pv = doc["Pv"].to<JsonObject>();
+            pv["V"] = id(mppt10030_vd_panel_voltage).state;
 
-      - mqtt.publish:
-          topic: N/ESP/solarcharger/1/ServiceName
-          payload: "MPPT 100/30 ESP"
+            JsonObject y = doc["Yield"].to<JsonObject>();
+            y["Power"] = pwr;
 
-      - mqtt.publish:
-          topic: N/ESP/solarcharger/1/DeviceInstance
-          payload: "1"
+            JsonObject dc0 = doc["Dc"]["0"].to<JsonObject>();
+            dc0["Voltage"] = id(mppt10030_vd_battery_voltage).state;
+            dc0["Current"] = id(mppt10030_vd_panel_current).state;
+
+            JsonObject hist0 = doc["History"]["Daily"]["0"].to<JsonObject>();
+            hist0["Yield"] = id(mppt10030_yield_today_wh) / 1000.0f;
+            hist0["MaxPower"] = id(mppt10030_max_power_today);
+            hist0["MaxPvVoltage"] = id(mppt10030_max_pv_voltage_today);
+            hist0["TimeInBulk"] = id(mppt10030_time_bulk);
+            hist0["TimeInAbsorption"] = id(mppt10030_time_abs);
+            hist0["TimeInFloat"] = id(mppt10030_time_float);
+
+            JsonObject hist1 = doc["History"]["Daily"]["1"].to<JsonObject>();
+            hist1["Yield"] = id(mppt10030_yield_yesterday);
+
+            JsonObject overall = doc["History"]["Overall"].to<JsonObject>();
+            overall["DaysAvailable"] = 2;
+            overall["Yield"] = id(mppt10030_yield_lifetime);
+
+            JsonObject link = doc["Link"].to<JsonObject>();
+            link["NetworkStatus"] = "0x04";
+
+            JsonObject settings = doc["Settings"].to<JsonObject>();
+            settings["ChargeCurrentLimit"] = 30.0;
+
+            doc["Mode"] = 0;
+            if (!isnan(id(mppt10020_vd_error_code).state))
+              doc["ErrorCode"] = (int) id(mppt10030_vd_error_code).state;
+            else
+             doc["ErrorCode"] = 0;
+            doc["State"] = state;
+            doc["MppOperationMode"] = 2;
+
+            std::string out;
+            serializeJson(doc, out);
+            return out;
