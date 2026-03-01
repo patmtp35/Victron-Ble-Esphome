@@ -1,6 +1,0 @@
-https://github.com/mr-manuel/venus-os_dbus-mqtt-solar-charger/tree/master
-
-https://github.com/freakent/dbus-mqtt-devices/tree/v0.9.0dev
-
-node-red => Shelly pro3em
-
