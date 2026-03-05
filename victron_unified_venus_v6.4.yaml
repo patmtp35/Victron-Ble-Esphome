@@ -1,0 +1,1476 @@
+#############################################
+# V6.4 - Maximum substitutions for public release
+# V6.3 - Amelioration remonté Historique MPPT
+# V6.2 - GX ESS amelioration
+# V6.1 - Amelioration Mqtt VenusOs
+# V6.0 - Rajout Venus Os Ready Via Mqtt
+# V5.0 – Unified BLE + VE.Direct Redundant
+#
+# Hardware:
+#   1x SmartShunt 500A  (BLE + VE.Direct)
+#   2x MPPT 100/20      (BLE + VE.Direct)
+#
+# Dependencies:
+#   https://github.com/mr-manuel/venus-os_dbus-mqtt-solar-charger
+#   https://github.com/freakent/dbus-mqtt-devices/tree/v0.9.0dev
+#
+# mr-manuel config example (per MPPT):
+# [DEFAULT]
+# logging = WARNING
+# device_name = SmartSolar MPPT 100/20
+# device_instance = 20
+# timeout = 30
+# history_days = 14   # must be 14
+# [MQTT]
+# broker_address = 127.0.0.1
+# broker_port = 1883
+# tls_enabled = 0
+# username = xxx
+# password = xxxxx
+# topic = venus/solarcharger/mppt_100_20
+#############################################
+
+substitutions:
+  #------------------------------------------
+  # Device identity
+  #------------------------------------------
+  name:             "victron-unifiedvenus-esp"
+  esphome_name:     "VictronUnifiedVenus-Esp"
+  friendly_name:    "Victron Unified"
+  sensor_prefix:    "victron_unified"
+  device_description: "Victron BLE + VE.Direct Unified Interface VenusOs Ready"
+  projectname:      "Pat.VictronUnifiedVenusReady"
+  appversion:       "6.4.0"
+
+  #------------------------------------------
+  # Network
+  #------------------------------------------
+  adress_ip:        !secret ip_victron_unified
+  gateway_ip:       !secret ip_gateway
+  dns_ip:           !secret ip_dns
+
+  #------------------------------------------
+  # OTA / AP
+  #------------------------------------------
+  ota_pswd:         !secret ota_pswd
+  ap_pwd:           !secret ota_pswd
+  api_encryption_key: !secret smartsolar2key
+
+  #------------------------------------------
+  # Time
+  #------------------------------------------
+  time_timezone:    "Europe/Paris"
+  time_id:          ha_time
+  time_platform:    homeassistant
+
+  #------------------------------------------
+  # Logging
+  #------------------------------------------
+  log_level:        "WARN"
+  baud_ratelog:     "0"
+
+  #------------------------------------------
+  # External component sources
+  #------------------------------------------
+  external_components_source_ble:     github://Fabian-Schmidt/esphome-victron_ble
+  external_components_source_vedirect: github://KinDR007/VictronMPPT-ESPHOME@main
+
+  #------------------------------------------
+  # MPPT 100/20 #1 — BLE credentials
+  #------------------------------------------
+  mppt1_name:             "smartsolar1"
+  mppt1_ble_mac:          !secret mppt100_20_mac
+  mppt1_ble_key:          !secret mppt100_20_key
+  # VE.Direct UART pins
+  mppt1_uart_tx_pin:      GPIO18    # NOT connected
+  mppt1_uart_rx_pin:      GPIO19    # TX of MPPT1
+  # Venus MQTT topic (must match mr-manuel config)
+  mppt1_venus_topic:      "venus/solarcharger/mppt_100_20"
+  # Venus dbus-mqtt-devices service name
+  mppt1_service_name:     "solarcharger1"
+
+  #------------------------------------------
+  # MPPT 100/20 #2 — BLE credentials
+  #------------------------------------------
+  mppt2_name:             "smartsolar2"
+  mppt2_ble_mac:          !secret mppt100_20_2mac
+  mppt2_ble_key:          !secret mppt100_20_2key
+  # VE.Direct UART pins
+  mppt2_uart_tx_pin:      GPIO17    # NOT connected
+  mppt2_uart_rx_pin:      GPIO16    # TX of MPPT2
+  # Venus MQTT topic (must match mr-manuel config)
+  mppt2_venus_topic:      "venus/solarcharger/mppt_100_20_2"
+  mppt2_service_name:     "solarcharger2"
+
+  #------------------------------------------
+  # SmartShunt 500A — BLE credentials
+  #------------------------------------------
+  shunt_name:             "smartshunt500a"
+  shunt_ble_mac:          !secret smartshunt500a_mac
+  shunt_ble_key:          !secret smartshunt500a_key
+  # VE.Direct UART pins
+  shunt_uart_tx_pin:      GPIO21    # NOT connected
+  shunt_uart_rx_pin:      GPIO22    # TX of SmartShunt
+  # Battery capacity (Ah) — sent to Venus OS
+  battery_capacity_ah:    "150"
+  # Venus dbus-mqtt-devices service name
+  shunt_service_name:     "battery1"
+
+  #------------------------------------------
+  # Venus OS MQTT
+  #------------------------------------------
+  venus_portal_id:        !secret venus_portal_id
+  venus_mqtt_client_id:   "victron_unified"
+  venus_app_version:      "6.4.0"
+  # Keepalive interval (seconds) — GX requires < 60s
+  venus_keepalive_interval: "40s"
+  # Battery proxy publish interval
+  battery_publish_interval: "2s"
+  # MPPT publish interval to Venus
+  mppt_publish_interval:  "5s"
+  # Status republish interval
+  status_interval:        "30s"
+  # JSON document size for Venus MQTT payloads (bytes)
+  # Increase if you see [E][json:071]: JSON document overflow
+  json_doc_size:          "8192"
+
+  #------------------------------------------
+  # Sensor update intervals
+  #------------------------------------------
+  interval_fast:    "5s"    # power, current
+  interval_medium:  "10s"   # voltage
+  interval_slow:    "60s"   # yield, energy
+  interval_timer:   "60s"   # bulk/abs/float timers
+
+#############################################
+### ESP32
+#############################################
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+#############################################
+### COMMON CONFIG
+#############################################
+
+<<: !include .common.yaml
+
+#############################################
+### EXTERNAL COMPONENTS
+#############################################
+
+external_components:
+  - source: ${external_components_source_ble}
+    refresh: 0s
+  - source: ${external_components_source_vedirect}
+    refresh: 0s
+
+#############################################
+### TIME + DAILY RESET
+#############################################
+
+time:
+  - platform: homeassistant
+    id: ha_time
+    on_time:
+      - seconds: 0
+        minutes: 0
+        hours: 0
+        then:
+          - lambda: |-
+              // ═══════════════════════════════════════
+              // MPPT1 — save yesterday then reset
+              // ═══════════════════════════════════════
+              id(mppt1_yield_yesterday_kwh) = id(mppt1_yield_today_wh) / 1000.0f;
+              id(mppt1_yield_lifetime_kwh) += id(mppt1_yield_yesterday_kwh);
+
+              id(mppt1_max_power_yesterday)     = id(mppt1_max_power_today);
+              id(mppt1_max_pv_voltage_yesterday)= id(mppt1_max_pv_voltage_today);
+
+              id(mppt1_yield_today_wh)          = 0;
+              id(mppt1_max_power_today)         = 0;
+              id(mppt1_max_pv_voltage_today)    = 0;
+              id(mppt1_time_bulk)               = 0;
+              id(mppt1_time_abs)                = 0;
+              id(mppt1_time_float)              = 0;
+              id(mppt1_last_state)              = 0;
+              id(mppt1_last_ts)                 = 0;
+              id(mppt1_max_batt_current_today)  = 0;
+
+              // ═══════════════════════════════════════
+              // MPPT2 — save yesterday then reset
+              // ═══════════════════════════════════════
+              id(mppt2_yield_yesterday_kwh) = id(mppt2_yield_today_wh) / 1000.0f;
+              id(mppt2_yield_lifetime_kwh) += id(mppt2_yield_yesterday_kwh);
+
+              id(mppt2_max_power_yesterday)     = id(mppt2_max_power_today);
+              id(mppt2_max_pv_voltage_yesterday)= id(mppt2_max_pv_voltage_today);
+
+              id(mppt2_yield_today_wh)          = 0;
+              id(mppt2_max_power_today)         = 0;
+              id(mppt2_max_pv_voltage_today)    = 0;
+              id(mppt2_time_bulk)               = 0;
+              id(mppt2_time_abs)                = 0;
+              id(mppt2_time_float)              = 0;
+              id(mppt2_last_state)              = 0;
+              id(mppt2_last_ts)                 = 0;
+              id(mppt2_max_batt_current_today)  = 0;
+
+              // ═══════════════════════════════════════
+              // Battery min/max voltage daily reset
+              // ═══════════════════════════════════════
+              id(batt_min_voltage_today) = 1000.0f;
+              id(batt_max_voltage_today) = 0.0f;
+
+#############################################
+### VENUS OS MQTT
+#############################################
+
+mqtt:
+  broker: !secret mqtt_venusos_host
+  port: 1883
+  username: !secret mqtt_venusos_user
+  password: !secret mqtt_venusos_pswd
+  discovery: false
+  client_id: ${venus_mqtt_client_id}
+
+  will_message:
+    topic: device/${venus_mqtt_client_id}/Status
+    payload: |
+      {"clientId":"${venus_mqtt_client_id}","connected":0,"services":{"${shunt_service_name}":"battery"}}
+
+  on_connect:
+    then:
+      - mqtt.publish:
+          topic: device/${venus_mqtt_client_id}/Status
+          retain: true
+          payload: |
+            {"clientId":"${venus_mqtt_client_id}","connected":1,"version":"${venus_app_version}","services":{"${shunt_service_name}":"battery"}}
+
+  on_message:
+    - topic: device/${venus_mqtt_client_id}/DBus
+      then:
+        - lambda: |-
+            DynamicJsonDocument doc(${json_doc_size});
+            auto err = deserializeJson(doc, x);
+            if (err) { ESP_LOGW("mqtt", "DBus JSON parse failed"); return; }
+
+            if (doc["portalId"].is<const char*>()) {
+              id(venus_portal_id_str) = doc["portalId"].as<const char*>();
+              ESP_LOGI("mqtt", "PortalId: %s", id(venus_portal_id_str).c_str());
+            }
+
+            if (doc["topicPath"].is<JsonObject>()) {
+              JsonObject tp = doc["topicPath"];
+              if (tp["${shunt_service_name}"]["W"].is<const char*>())
+                id(battery_topic_w) = tp["${shunt_service_name}"]["W"].as<const char*>();
+              if (tp["${mppt1_service_name}"]["W"].is<const char*>())
+                id(mppt1_topic_w) = tp["${mppt1_service_name}"]["W"].as<const char*>();
+              if (tp["${mppt2_service_name}"]["W"].is<const char*>())
+                id(mppt2_topic_w) = tp["${mppt2_service_name}"]["W"].as<const char*>();
+            }
+
+#############################################
+### BLE TRACKER + DEVICES
+#############################################
+
+esp32_ble_tracker:
+
+victron_ble:
+  - id: mppt1_ble
+    mac_address: ${mppt1_ble_mac}
+    bindkey:     ${mppt1_ble_key}
+
+  - id: mppt2_ble
+    mac_address: ${mppt2_ble_mac}
+    bindkey:     ${mppt2_ble_key}
+
+  - id: shunt_ble
+    mac_address: ${shunt_ble_mac}
+    bindkey:     ${shunt_ble_key}
+
+#############################################
+### VE.Direct — 3x UART
+#############################################
+
+uart:
+  - id: uart_mppt1
+    tx_pin: ${mppt1_uart_tx_pin}
+    rx_pin: ${mppt1_uart_rx_pin}
+    baud_rate: 19200
+    rx_buffer_size: 256
+
+  - id: uart_mppt2
+    tx_pin: ${mppt2_uart_tx_pin}
+    rx_pin: ${mppt2_uart_rx_pin}
+    baud_rate: 19200
+    rx_buffer_size: 256
+
+  - id: uart_shunt
+    tx_pin: ${shunt_uart_tx_pin}
+    rx_pin: ${shunt_uart_rx_pin}
+    baud_rate: 19200
+    rx_buffer_size: 256
+
+victron:
+  - uart_id: uart_mppt1
+    id: mppt1_vd
+    throttle: 2s
+
+  - uart_id: uart_mppt2
+    id: mppt2_vd
+    throttle: 2s
+
+  - uart_id: uart_shunt
+    id: shunt_vd
+    throttle: 2s
+
+#############################################
+### GLOBALS
+#############################################
+
+globals:
+
+  - id: venus_portal_id_str
+    type: std::string
+    initial_value: '""'
+
+  - id: battery_topic_w
+    type: std::string
+    initial_value: '""'
+
+  - id: mppt1_topic_w
+    type: std::string
+    initial_value: '""'
+
+  - id: mppt2_topic_w
+    type: std::string
+    initial_value: '""'
+
+  # ── MPPT1 daily stats ──
+  - id: mppt1_yield_today_wh
+    type: float
+    initial_value: '0.0'
+  - id: mppt1_yield_yesterday_kwh
+    type: float
+    initial_value: '0.0'
+  - id: mppt1_yield_lifetime_kwh
+    type: float
+    initial_value: '0.0'
+  - id: mppt1_max_power_today
+    type: float
+    initial_value: '0.0'
+  - id: mppt1_max_power_yesterday
+    type: float
+    initial_value: '0.0'
+  - id: mppt1_max_pv_voltage_today
+    type: float
+    initial_value: '0.0'
+  - id: mppt1_max_pv_voltage_yesterday
+    type: float
+    initial_value: '0.0'
+  - id: mppt1_max_batt_current_today
+    type: float
+    initial_value: '0.0'
+
+  # ── MPPT1 charge timers (minutes) ──
+  - id: mppt1_last_state
+    type: int
+    initial_value: '0'
+  - id: mppt1_last_ts
+    type: uint32_t
+    initial_value: '0'
+  - id: mppt1_time_bulk
+    type: uint32_t
+    initial_value: '0'
+  - id: mppt1_time_abs
+    type: uint32_t
+    initial_value: '0'
+  - id: mppt1_time_float
+    type: uint32_t
+    initial_value: '0'
+
+  # ── MPPT2 daily stats ──
+  - id: mppt2_yield_today_wh
+    type: float
+    initial_value: '0.0'
+  - id: mppt2_yield_yesterday_kwh
+    type: float
+    initial_value: '0.0'
+  - id: mppt2_yield_lifetime_kwh
+    type: float
+    initial_value: '0.0'
+  - id: mppt2_max_power_today
+    type: float
+    initial_value: '0.0'
+  - id: mppt2_max_power_yesterday
+    type: float
+    initial_value: '0.0'
+  - id: mppt2_max_pv_voltage_today
+    type: float
+    initial_value: '0.0'
+  - id: mppt2_max_pv_voltage_yesterday
+    type: float
+    initial_value: '0.0'
+  - id: mppt2_max_batt_current_today
+    type: float
+    initial_value: '0.0'
+
+  # ── MPPT2 charge timers (minutes) ──
+  - id: mppt2_last_state
+    type: int
+    initial_value: '0'
+  - id: mppt2_last_ts
+    type: uint32_t
+    initial_value: '0'
+  - id: mppt2_time_bulk
+    type: uint32_t
+    initial_value: '0'
+  - id: mppt2_time_abs
+    type: uint32_t
+    initial_value: '0'
+  - id: mppt2_time_float
+    type: uint32_t
+    initial_value: '0'
+
+  # ── Battery daily min/max ──
+  - id: batt_min_voltage_today
+    type: float
+    initial_value: '1000.0'
+  - id: batt_max_voltage_today
+    type: float
+    initial_value: '0.0'
+
+  # ── Unused instances kept for compatibility ──
+  - id: battery_instance
+    type: int
+    initial_value: '-1'
+  - id: mppt1_instance
+    type: int
+    initial_value: '-1'
+  - id: mppt2_instance
+    type: int
+    initial_value: '-1'
+  - id: shunt_productid_sent
+    type: bool
+    initial_value: 'false'
+  - id: mppt1_productid_sent
+    type: bool
+    initial_value: 'false'
+  - id: mppt2_productid_sent
+    type: bool
+    initial_value: 'false'
+
+#############################################
+### SENSORS
+#############################################
+
+sensor:
+
+  # ════════════════════════════════════════
+  # MPPT1 BLE
+  # ════════════════════════════════════════
+
+  - platform: victron_ble
+    victron_ble_id: mppt1_ble
+    id: mppt1_ble_batt_voltage
+    name: "${mppt1_name}_ble_battery_voltage"
+    type: BATTERY_VOLTAGE
+
+  - platform: victron_ble
+    victron_ble_id: mppt1_ble
+    id: mppt1_ble_batt_current
+    name: "${mppt1_name}_ble_panel_current"
+    type: BATTERY_CURRENT
+
+  - platform: victron_ble
+    victron_ble_id: mppt1_ble
+    id: mppt1_ble_pv_voltage
+    name: "${mppt1_name}_ble_panel_voltage"
+    type: INPUT_VOLTAGE
+
+  - platform: victron_ble
+    victron_ble_id: mppt1_ble
+    id: mppt1_ble_pv_power
+    name: "${mppt1_name}_ble_panel_power"
+    type: PV_POWER
+
+  - platform: victron_ble
+    victron_ble_id: mppt1_ble
+    id: mppt1_ble_load_current
+    name: "${mppt1_name}_ble_load_current"
+    type: LOAD_CURRENT
+
+  - platform: victron_ble
+    victron_ble_id: mppt1_ble
+    id: mppt1_ble_yield_today
+    name: "${mppt1_name}_ble_yield_today"
+    type: YIELD_TODAY
+
+  - platform: victron_ble
+    victron_ble_id: mppt1_ble
+    id: mppt1_ble_temperature
+    name: "${mppt1_name}_ble_temperature"
+    type: TEMPERATURE
+
+  # ════════════════════════════════════════
+  # MPPT2 BLE
+  # ════════════════════════════════════════
+
+  - platform: victron_ble
+    victron_ble_id: mppt2_ble
+    id: mppt2_ble_pv_voltage
+    name: "${mppt2_name}_ble_panel_voltage"
+    type: INPUT_VOLTAGE
+
+  - platform: victron_ble
+    victron_ble_id: mppt2_ble
+    id: mppt2_ble_pv_power
+    name: "${mppt2_name}_ble_panel_power"
+    type: PV_POWER
+
+  - platform: victron_ble
+    victron_ble_id: mppt2_ble
+    id: mppt2_ble_batt_voltage
+    name: "${mppt2_name}_ble_battery_voltage"
+    type: BATTERY_VOLTAGE
+
+  - platform: victron_ble
+    victron_ble_id: mppt2_ble
+    id: mppt2_ble_batt_current
+    name: "${mppt2_name}_ble_panel_current"
+    type: BATTERY_CURRENT
+
+  - platform: victron_ble
+    victron_ble_id: mppt2_ble
+    id: mppt2_ble_load_current
+    name: "${mppt2_name}_ble_load_current"
+    type: LOAD_CURRENT
+
+  - platform: victron_ble
+    victron_ble_id: mppt2_ble
+    id: mppt2_ble_yield_today
+    name: "${mppt2_name}_ble_yield_today"
+    type: YIELD_TODAY
+
+  - platform: victron_ble
+    victron_ble_id: mppt2_ble
+    id: mppt2_ble_error_code
+    name: "${mppt2_name}_ble_error_code"
+    type: CHARGER_ERROR
+
+  # ════════════════════════════════════════
+  # SmartShunt BLE
+  # ════════════════════════════════════════
+
+  - platform: victron_ble
+    victron_ble_id: shunt_ble
+    id: shunt_ble_batt_voltage
+    name: "${shunt_name}_ble_battery_voltage"
+    type: BATTERY_VOLTAGE
+
+  - platform: victron_ble
+    victron_ble_id: shunt_ble
+    id: shunt_ble_batt_current
+    name: "${shunt_name}_ble_battery_current"
+    type: BATTERY_CURRENT
+
+  - platform: victron_ble
+    victron_ble_id: shunt_ble
+    id: shunt_ble_batt_power
+    name: "${shunt_name}_ble_battery_power"
+    type: BATTERY_POWER
+
+  - platform: victron_ble
+    victron_ble_id: shunt_ble
+    id: shunt_ble_soc
+    name: "${shunt_name}_ble_soc"
+    type: STATE_OF_CHARGE
+
+  # ════════════════════════════════════════
+  # SmartShunt VE.Direct
+  # ════════════════════════════════════════
+
+  - platform: victron
+    victron_id: shunt_vd
+
+    battery_voltage:
+      name: "${shunt_name}_vd_battery_voltage"
+      id: shunt_vd_batt_voltage
+      internal: true
+
+    battery_current:
+      name: "${shunt_name}_vd_battery_current"
+      id: shunt_vd_batt_current
+      internal: true
+
+    instantaneous_power:
+      name: "${shunt_name}_vd_power"
+      id: shunt_vd_power
+      internal: true
+
+    battery_temperature:
+      name: "${shunt_name}_vd_battery_temperature"
+      internal: true
+
+    time_to_go:
+      name: "${shunt_name}_vd_time_to_go"
+      id: shunt_vd_time_to_go
+      unit_of_measurement: "min"
+      internal: false
+
+    state_of_charge:
+      name: "${shunt_name}_vd_soc"
+      id: shunt_vd_soc
+      internal: true
+
+    consumed_amp_hours:
+      name: "${shunt_name}_vd_consumed_ah"
+      id: shunt_vd_consumed_ah
+      internal: true
+
+    amount_of_discharged_energy:
+      name: "${shunt_name}_vd_energy_discharged"
+      unit_of_measurement: "Wh"
+      internal: true
+
+    amount_of_charged_energy:
+      name: "${shunt_name}_vd_energy_charged"
+      unit_of_measurement: "Wh"
+      internal: true
+
+    number_of_charge_cycles:
+      name: "${shunt_name}_vd_charge_cycles"
+      internal: true
+
+  # ════════════════════════════════════════
+  # MPPT1 VE.Direct
+  # ════════════════════════════════════════
+
+  - platform: victron
+    victron_id: mppt1_vd
+
+    panel_voltage:
+      name: "${mppt1_name}_vd_panel_voltage"
+      id: mppt1_vd_pv_voltage
+
+    panel_power:
+      name: "${mppt1_name}_vd_panel_power"
+      id: mppt1_vd_pv_power
+
+    battery_voltage:
+      name: "${mppt1_name}_vd_battery_voltage"
+      id: mppt1_vd_batt_voltage
+
+    battery_current:
+      name: "${mppt1_name}_vd_panel_current"
+      id: mppt1_vd_batt_current
+
+    yield_today:
+      name: "${mppt1_name}_vd_yield_today"
+      id: mppt1_vd_yield_today
+      on_value:
+        then:
+          - lambda: |-
+              // KinDR007 returns Wh (integer)
+              if (!isnan(x) && x >= 0)
+                id(mppt1_yield_today_wh) = x;
+
+    yield_yesterday:
+      name: "${mppt1_name}_vd_yield_yesterday"
+      id: mppt1_vd_yield_yesterday
+
+    yield_total:
+      name: "${mppt1_name}_vd_yield_total"
+      id: mppt1_vd_yield_total
+      on_value:
+        then:
+          - lambda: |-
+              // KinDR007 returns Wh → store as kWh
+              if (!isnan(x) && x > 0)
+                id(mppt1_yield_lifetime_kwh) = x / 1000.0f;
+
+    max_power_today:
+      name: "${mppt1_name}_vd_max_power_today"
+      id: mppt1_vd_max_power_today
+
+    max_power_yesterday:
+      name: "${mppt1_name}_vd_max_power_yesterday"
+      id: mppt1_vd_max_power_yesterday
+
+    day_number:
+      name: "${mppt1_name}_vd_day_number"
+      id: mppt1_vd_day_number
+
+    error_code:
+      name: "${mppt1_name}_vd_error_code"
+      id: mppt1_vd_error_code
+
+    charging_mode_id:
+      name: "${mppt1_name}_vd_charging_mode_id"
+      id: mppt1_vd_charging_mode_id
+
+    tracking_mode_id:
+      name: "${mppt1_name}_vd_tracking_mode_id"
+      id: mppt1_vd_tracking_mode_id
+
+    load_current:
+      name: "${mppt1_name}_vd_load_current"
+      id: mppt1_vd_load_current
+
+  # ════════════════════════════════════════
+  # MPPT2 VE.Direct
+  # ════════════════════════════════════════
+
+  - platform: victron
+    victron_id: mppt2_vd
+
+    panel_voltage:
+      name: "${mppt2_name}_vd_panel_voltage"
+      id: mppt2_vd_pv_voltage
+
+    panel_power:
+      name: "${mppt2_name}_vd_panel_power"
+      id: mppt2_vd_pv_power
+
+    battery_voltage:
+      name: "${mppt2_name}_vd_battery_voltage"
+      id: mppt2_vd_batt_voltage
+
+    battery_current:
+      name: "${mppt2_name}_vd_panel_current"
+      id: mppt2_vd_batt_current
+
+    yield_today:
+      name: "${mppt2_name}_vd_yield_today"
+      id: mppt2_vd_yield_today
+      on_value:
+        then:
+          - lambda: |-
+              // KinDR007 returns Wh (integer)
+              if (!isnan(x) && x >= 0)
+                id(mppt2_yield_today_wh) = x;
+
+    yield_yesterday:
+      name: "${mppt2_name}_vd_yield_yesterday"
+      id: mppt2_vd_yield_yesterday
+
+    yield_total:
+      name: "${mppt2_name}_vd_yield_total"
+      id: mppt2_vd_yield_total
+      on_value:
+        then:
+          - lambda: |-
+              // KinDR007 returns Wh → store as kWh
+              if (!isnan(x) && x > 0)
+                id(mppt2_yield_lifetime_kwh) = x / 1000.0f;
+
+    max_power_today:
+      name: "${mppt2_name}_vd_max_power_today"
+      id: mppt2_vd_max_power_today
+
+    max_power_yesterday:
+      name: "${mppt2_name}_vd_max_power_yesterday"
+      id: mppt2_vd_max_power_yesterday
+
+    day_number:
+      name: "${mppt2_name}_vd_day_number"
+      id: mppt2_vd_day_number
+
+    error_code:
+      name: "${mppt2_name}_vd_error_code"
+      id: mppt2_vd_error_code
+
+    charging_mode_id:
+      name: "${mppt2_name}_vd_charging_mode_id"
+      id: mppt2_vd_charging_mode_id
+
+    tracking_mode_id:
+      name: "${mppt2_name}_vd_tracking_mode_id"
+      id: mppt2_vd_tracking_mode_id
+
+    load_current:
+      name: "${mppt2_name}_vd_load_current"
+      id: mppt2_vd_load_current
+
+  # ════════════════════════════════════════
+  # SmartShunt — unified templates
+  # ════════════════════════════════════════
+
+  - platform: template
+    name: "DEBUG ${shunt_name} BLE current raw"
+    unit_of_measurement: "A"
+    update_interval: ${interval_fast}
+    lambda: return id(shunt_ble_batt_current).state;
+
+  - platform: template
+    name: "DEBUG ${shunt_name} VE.Direct current raw"
+    unit_of_measurement: "A"
+    update_interval: ${interval_fast}
+    lambda: return id(shunt_vd_batt_current).state;
+
+  - platform: template
+    name: "${shunt_name}_battery_voltage"
+    id: shunt_battery_voltage
+    device_class: voltage
+    accuracy_decimals: 2
+    unit_of_measurement: "V"
+    update_interval: ${interval_fast}
+    lambda: |-
+      if (!isnan(id(shunt_ble_batt_voltage).state))
+        return id(shunt_ble_batt_voltage).state;
+      return id(shunt_vd_batt_voltage).state;
+
+  - platform: template
+    name: "${shunt_name}_battery_current"
+    id: shunt_battery_current
+    device_class: current
+    accuracy_decimals: 2
+    unit_of_measurement: "A"
+    icon: "mdi:current-dc"
+    update_interval: ${interval_fast}
+    lambda: |-
+      float cur = NAN;
+      if (!isnan(id(shunt_ble_batt_current).state))
+        cur = id(shunt_ble_batt_current).state;
+      else
+        cur = id(shunt_vd_batt_current).state;
+
+      if (!isnan(cur)) {
+        float abs_cur = fabs(cur);
+        if (abs_cur > id(mppt1_max_batt_current_today)) id(mppt1_max_batt_current_today) = abs_cur;
+        if (abs_cur > id(mppt2_max_batt_current_today)) id(mppt2_max_batt_current_today) = abs_cur;
+        return cur;
+      }
+      return NAN;
+
+  - platform: template
+    name: "${shunt_name}_battery_power"
+    id: shunt_battery_power
+    device_class: power
+    accuracy_decimals: 2
+    unit_of_measurement: "W"
+    icon: "mdi:flash"
+    update_interval: ${interval_fast}
+    lambda: |-
+      float p_ble = id(shunt_ble_batt_power).state;
+      if (!isnan(p_ble))
+        return roundf(p_ble * 100.0f) / 100.0f;
+      float v = id(shunt_vd_batt_voltage).state;
+      float i = id(shunt_vd_batt_current).state;
+      if (!isnan(v) && !isnan(i))
+        return roundf(v * i * 100.0f) / 100.0f;
+      return NAN;
+
+  - platform: template
+    name: "${shunt_name}_soc"
+    id: shunt_soc
+    device_class: battery
+    unit_of_measurement: "%"
+    icon: "mdi:battery-high"
+    update_interval: ${interval_fast}
+    lambda: |-
+      if (!isnan(id(shunt_ble_soc).state))
+        return id(shunt_ble_soc).state;
+      return id(shunt_vd_soc).state;
+
+  - platform: template
+    name: "${shunt_name}_consumed_ah"
+    unit_of_measurement: "Ah"
+    icon: "mdi:battery-minus"
+    update_interval: 30s
+    lambda: |-
+      if (!isnan(id(shunt_vd_consumed_ah).state))
+        return id(shunt_vd_consumed_ah).state;
+      return NAN;
+
+  # ════════════════════════════════════════
+  # MPPT1 — unified templates (BLE priority)
+  # ════════════════════════════════════════
+
+  - platform: template
+    name: "${mppt1_name}_esp_battery_voltage"
+    id: mppt1_esp_batt_voltage
+    device_class: voltage
+    accuracy_decimals: 2
+    unit_of_measurement: "V"
+    update_interval: ${interval_medium}
+    lambda: |-
+      float v = id(mppt1_ble_batt_voltage).state;
+      if (!isnan(v) && v > 10.0) return v;
+      v = id(mppt1_vd_batt_voltage).state;
+      if (!isnan(v) && v > 10.0) return v;
+      return NAN;
+
+  - platform: template
+    name: "${mppt1_name}_esp_panel_voltage"
+    id: mppt1_esp_pv_voltage
+    device_class: voltage
+    accuracy_decimals: 2
+    unit_of_measurement: "V"
+    update_interval: ${interval_medium}
+    lambda: |-
+      float v = NAN;
+      if (!isnan(id(mppt1_ble_pv_voltage).state) && id(mppt1_ble_pv_voltage).state > 5.0)
+        v = id(mppt1_ble_pv_voltage).state;
+      else if (!isnan(id(mppt1_vd_pv_voltage).state) && id(mppt1_vd_pv_voltage).state > 5.0)
+        v = id(mppt1_vd_pv_voltage).state;
+      if (!isnan(v) && v > id(mppt1_max_pv_voltage_today))
+        id(mppt1_max_pv_voltage_today) = v;
+      return isnan(v) ? 0.0f : v;
+
+  - platform: template
+    name: "${mppt1_name}_esp_panel_current"
+    id: mppt1_esp_pv_current
+    device_class: current
+    unit_of_measurement: "A"
+    update_interval: ${interval_medium}
+    lambda: |-
+      float i = id(mppt1_ble_batt_current).state;
+      if (!isnan(i) && fabs(i) > 0.01) return i;
+      return id(mppt1_vd_batt_current).state;
+
+  - platform: template
+    name: "${mppt1_name}_esp_panel_power"
+    id: mppt1_esp_pv_power
+    accuracy_decimals: 2
+    unit_of_measurement: "W"
+    update_interval: ${interval_fast}
+    lambda: |-
+      if (!isnan(id(mppt1_ble_pv_power).state)) return id(mppt1_ble_pv_power).state;
+      return id(mppt1_vd_pv_power).state;
+
+  - platform: template
+    name: "${mppt1_name}_esp_load_current"
+    id: mppt1_esp_load_current
+    unit_of_measurement: "A"
+    update_interval: ${interval_medium}
+    lambda: |-
+      if (!isnan(id(mppt1_ble_load_current).state)) return id(mppt1_ble_load_current).state;
+      return id(mppt1_vd_load_current).state;
+
+  - platform: template
+    name: "${mppt1_name}_esp_yield_today"
+    id: mppt1_esp_yield_today
+    device_class: energy
+    state_class: measurement
+    unit_of_measurement: "kWh"
+    update_interval: ${interval_slow}
+    lambda: return id(mppt1_yield_today_wh) / 1000.0f;
+
+  - platform: template
+    name: "${mppt1_name}_esp_yield_yesterday"
+    id: mppt1_esp_yield_yesterday
+    device_class: energy
+    state_class: measurement
+    unit_of_measurement: "kWh"
+    update_interval: ${interval_slow}
+    lambda: return id(mppt1_yield_yesterday_kwh);
+
+  - platform: template
+    name: "${mppt1_name}_esp_yield_total"
+    id: mppt1_esp_yield_total
+    unit_of_measurement: "kWh"
+    update_interval: ${interval_slow}
+    lambda: return id(mppt1_yield_lifetime_kwh);
+
+  - platform: template
+    name: "${mppt1_name}_esp_max_power_today"
+    id: mppt1_esp_max_power_today
+    unit_of_measurement: "W"
+    update_interval: ${interval_slow}
+    lambda: |-
+      float vd = id(mppt1_vd_max_power_today).state;
+      if (!isnan(vd)) return vd;
+      return id(mppt1_max_power_today);
+
+  # ════════════════════════════════════════
+  # MPPT2 — unified templates (BLE priority)
+  # ════════════════════════════════════════
+
+  - platform: template
+    name: "${mppt2_name}_esp_battery_voltage"
+    id: mppt2_esp_batt_voltage
+    device_class: voltage
+    accuracy_decimals: 2
+    unit_of_measurement: "V"
+    update_interval: ${interval_medium}
+    lambda: |-
+      float v = id(mppt2_ble_batt_voltage).state;
+      if (!isnan(v) && v > 10.0) return v;
+      v = id(mppt2_vd_batt_voltage).state;
+      if (!isnan(v) && v > 10.0) return v;
+      return NAN;
+
+  - platform: template
+    name: "${mppt2_name}_esp_panel_voltage"
+    id: mppt2_esp_pv_voltage
+    device_class: voltage
+    accuracy_decimals: 2
+    unit_of_measurement: "V"
+    update_interval: ${interval_medium}
+    lambda: |-
+      float v = NAN;
+      if (!isnan(id(mppt2_ble_pv_voltage).state) && id(mppt2_ble_pv_voltage).state > 5.0)
+        v = id(mppt2_ble_pv_voltage).state;
+      else if (!isnan(id(mppt2_vd_pv_voltage).state) && id(mppt2_vd_pv_voltage).state > 5.0)
+        v = id(mppt2_vd_pv_voltage).state;
+      if (!isnan(v) && v > id(mppt2_max_pv_voltage_today))
+        id(mppt2_max_pv_voltage_today) = v;
+      return isnan(v) ? 0.0f : v;
+
+  - platform: template
+    name: "${mppt2_name}_esp_panel_current"
+    id: mppt2_esp_pv_current
+    device_class: current
+    unit_of_measurement: "A"
+    update_interval: ${interval_medium}
+    lambda: |-
+      float i = id(mppt2_ble_batt_current).state;
+      if (!isnan(i) && fabs(i) > 0.01) return i;
+      return id(mppt2_vd_batt_current).state;
+
+  - platform: template
+    name: "${mppt2_name}_esp_panel_power"
+    id: mppt2_esp_pv_power
+    accuracy_decimals: 2
+    unit_of_measurement: "W"
+    update_interval: ${interval_fast}
+    lambda: |-
+      if (!isnan(id(mppt2_ble_pv_power).state)) return id(mppt2_ble_pv_power).state;
+      return id(mppt2_vd_pv_power).state;
+
+  - platform: template
+    name: "${mppt2_name}_esp_load_current"
+    id: mppt2_esp_load_current
+    unit_of_measurement: "A"
+    update_interval: ${interval_medium}
+    lambda: |-
+      if (!isnan(id(mppt2_ble_load_current).state)) return id(mppt2_ble_load_current).state;
+      return id(mppt2_vd_load_current).state;
+
+  - platform: template
+    name: "${mppt2_name}_esp_yield_today"
+    id: mppt2_esp_yield_today
+    device_class: energy
+    state_class: measurement
+    unit_of_measurement: "kWh"
+    update_interval: ${interval_slow}
+    lambda: return id(mppt2_yield_today_wh) / 1000.0f;
+
+  - platform: template
+    name: "${mppt2_name}_esp_yield_yesterday"
+    id: mppt2_esp_yield_yesterday
+    device_class: energy
+    state_class: measurement
+    unit_of_measurement: "kWh"
+    update_interval: ${interval_slow}
+    lambda: return id(mppt2_yield_yesterday_kwh);
+
+  - platform: template
+    name: "${mppt2_name}_esp_yield_total"
+    id: mppt2_esp_yield_total
+    unit_of_measurement: "kWh"
+    update_interval: ${interval_slow}
+    lambda: return id(mppt2_yield_lifetime_kwh);
+
+  - platform: template
+    name: "${mppt2_name}_esp_max_power_today"
+    id: mppt2_esp_max_power_today
+    unit_of_measurement: "W"
+    update_interval: ${interval_slow}
+    lambda: |-
+      float vd = id(mppt2_vd_max_power_today).state;
+      if (!isnan(vd)) return vd;
+      return id(mppt2_max_power_today);
+
+#############################################
+### TEXT SENSORS
+#############################################
+
+text_sensor:
+
+  # ── MPPT1 VE.Direct ──
+  - platform: victron
+    victron_id: mppt1_vd
+    charging_mode:
+      name: "${mppt1_name}_vd_charging_mode"
+      id: mppt1_vd_charging_mode
+    error:
+      name: "${mppt1_name}_vd_error"
+      id: mppt1_vd_error
+    tracking_mode:
+      name: "${mppt1_name}_vd_tracking_mode"
+      id: mppt1_vd_tracking_mode
+    firmware_version:
+      name: "${mppt1_name}_vd_firmware_version"
+      id: mppt1_vd_firmware_version
+    device_type:
+      name: "${mppt1_name}_vd_device_type"
+      id: mppt1_vd_device_type
+    serial_number:
+      name: "${mppt1_name}_vd_serial_number"
+      id: mppt1_vd_serial_number
+
+  # ── MPPT2 VE.Direct ──
+  - platform: victron
+    victron_id: mppt2_vd
+    charging_mode:
+      name: "${mppt2_name}_vd_charging_mode"
+      id: mppt2_vd_charging_mode
+    error:
+      name: "${mppt2_name}_vd_error"
+      id: mppt2_vd_error
+    tracking_mode:
+      name: "${mppt2_name}_vd_tracking_mode"
+      id: mppt2_vd_tracking_mode
+    firmware_version:
+      name: "${mppt2_name}_vd_firmware_version"
+      id: mppt2_vd_firmware_version
+    device_type:
+      name: "${mppt2_name}_vd_device_type"
+      id: mppt2_vd_device_type
+    serial_number:
+      name: "${mppt2_name}_vd_serial_number"
+      id: mppt2_vd_serial_number
+
+  # ── MPPT1 unified templates ──
+  - platform: template
+    name: "${mppt1_name}_esp_charging_mode"
+    id: mppt1_esp_charging_mode
+    update_interval: ${interval_slow}
+    lambda: return id(mppt1_vd_charging_mode).state;
+
+  - platform: template
+    name: "${mppt1_name}_esp_tracking_mode"
+    id: mppt1_esp_tracking_mode
+    update_interval: ${interval_slow}
+    lambda: return id(mppt1_vd_tracking_mode).state;
+
+  - platform: template
+    name: "${mppt1_name}_esp_error"
+    id: mppt1_esp_error
+    update_interval: ${interval_slow}
+    lambda: return id(mppt1_vd_error).state;
+
+  - platform: template
+    name: "${mppt1_name}_esp_firmware_version"
+    id: mppt1_esp_firmware_version
+    update_interval: ${interval_slow}
+    lambda: return id(mppt1_vd_firmware_version).state;
+
+  - platform: template
+    name: "${mppt1_name}_esp_device_type"
+    id: mppt1_esp_device_type
+    update_interval: ${interval_slow}
+    lambda: return id(mppt1_vd_device_type).state;
+
+  - platform: template
+    name: "${mppt1_name}_esp_serial_number"
+    id: mppt1_esp_serial_number
+    update_interval: ${interval_slow}
+    lambda: return id(mppt1_vd_serial_number).state;
+
+#############################################
+### BINARY SENSORS
+#############################################
+
+binary_sensor:
+
+  # ── MPPT1 VE.Direct ──
+  - platform: victron
+    victron_id: mppt1_vd
+    load_state:
+      name: "${mppt1_name}_vd_load_state"
+      id: mppt1_vd_load_state
+    relay_state:
+      name: "${mppt1_name}_vd_relay_state"
+      id: mppt1_vd_relay_state
+
+  # ── MPPT2 VE.Direct ──
+  - platform: victron
+    victron_id: mppt2_vd
+    load_state:
+      name: "${mppt2_name}_vd_load_state"
+    relay_state:
+      name: "${mppt2_name}_vd_relay_state"
+
+  # ── MPPT1 unified templates ──
+  - platform: template
+    name: "${mppt1_name}_esp_load_state"
+    id: mppt1_esp_load_state
+    lambda: return id(mppt1_vd_load_state).state;
+
+  - platform: template
+    name: "${mppt1_name}_esp_relay_state"
+    id: mppt1_esp_relay_state
+    lambda: return id(mppt1_vd_relay_state).state;
+
+#############################################
+### BUTTONS
+#############################################
+
+button:
+  - platform: restart
+    name: "${mppt1_name}_esp_restart_esp"
+    id: mppt1_esp_restart
+
+  - platform: template
+    name: "Reset MPPT Lifetime"
+    on_press:
+      - lambda: |-
+          id(mppt1_yield_lifetime_kwh) = 0;
+          id(mppt2_yield_lifetime_kwh) = 0;
+
+#############################################
+### INTERVALS
+#############################################
+
+interval:
+
+  # ── Battery proxy → Venus OS ──
+  - interval: ${battery_publish_interval}
+    then:
+      - if:
+          condition:
+            lambda: return !id(battery_topic_w).empty();
+          then:
+            - mqtt.publish:
+                topic: device/${venus_mqtt_client_id}/Proxy
+                qos: 0
+                retain: false
+                payload: !lambda |-
+                  DynamicJsonDocument doc(${json_doc_size});
+                  doc["topicPath"] = id(battery_topic_w);
+                  JsonObject v = doc["values"].to<JsonObject>();
+
+                  float vb = id(shunt_battery_voltage).state;
+                  if (!isnan(vb)) {
+                    if (vb < id(batt_min_voltage_today)) id(batt_min_voltage_today) = vb;
+                    if (vb > id(batt_max_voltage_today)) id(batt_max_voltage_today) = vb;
+                    v["Dc/0/Voltage"] = vb;
+                  }
+
+                  float ib = id(shunt_battery_current).state;
+                  if (!isnan(ib)) v["Dc/0/Current"] = ib;
+
+                  float pw = id(shunt_vd_power).state;
+                  if (!isnan(pw))
+                    v["Dc/0/Power"] = pw;
+                  else {
+                    float p2 = id(shunt_battery_power).state;
+                    if (!isnan(p2)) v["Dc/0/Power"] = p2;
+                  }
+
+                  float soc = id(shunt_soc).state;
+                  if (!isnan(soc)) v["Soc"] = soc;
+
+                  float cah = id(shunt_vd_consumed_ah).state;
+                  if (!isnan(cah)) v["ConsumedAh"] = cah;
+
+                  v["InstalledCapacity"] = ${battery_capacity_ah};
+
+                  if (id(batt_min_voltage_today) < 1000.0)
+                    v["History/Daily/0/MinVoltage"] = id(batt_min_voltage_today);
+                  if (id(batt_max_voltage_today) > 0.0)
+                    v["History/Daily/0/MaxVoltage"] = id(batt_max_voltage_today);
+
+                  float ttg = id(shunt_vd_time_to_go).state;
+                  if (!isnan(ttg) && ttg > 0)
+                    v["TimeToGo"] = (int) ttg;
+
+                  std::string out;
+                  serializeJson(doc, out);
+                  return out;
+
+  # ── GX keepalive ──
+  - interval: ${venus_keepalive_interval}
+    then:
+      - if:
+          condition:
+            lambda: return !id(venus_portal_id_str).empty();
+          then:
+            - mqtt.publish:
+                topic: !lambda |-
+                  return std::string("R/") + id(venus_portal_id_str) + "/keepalive";
+                payload: ""
+                qos: 0
+                retain: false
+
+  # ── Status heartbeat ──
+  - interval: ${status_interval}
+    then:
+      - mqtt.publish:
+          topic: device/${venus_mqtt_client_id}/Status
+          qos: 0
+          retain: true
+          payload: |
+            {"clientId":"${venus_mqtt_client_id}","connected":1,"version":"${venus_app_version}","services":{"${shunt_service_name}":"battery"}}
+
+  # ── Charge timers (1 min tick) ──
+  - interval: ${interval_timer}
+    then:
+      - lambda: |-
+          int m1 = (int) id(mppt1_vd_charging_mode_id).state;
+          if (m1 == 3) id(mppt1_time_bulk)++;
+          if (m1 == 4) id(mppt1_time_abs)++;
+          if (m1 == 5) id(mppt1_time_float)++;
+
+          int m2 = (int) id(mppt2_vd_charging_mode_id).state;
+          if (m2 == 3) id(mppt2_time_bulk)++;
+          if (m2 == 4) id(mppt2_time_abs)++;
+          if (m2 == 5) id(mppt2_time_float)++;
+
+  # ── MPPT1 → Venus OS ──
+  - interval: ${mppt_publish_interval}
+    then:
+      - mqtt.publish:
+          topic: ${mppt1_venus_topic}
+          retain: true
+          payload: !lambda |-
+            DynamicJsonDocument doc(${json_doc_size});
+
+            float pwr = id(mppt1_vd_pv_power).state;
+            if (isnan(pwr)) pwr = id(mppt1_ble_pv_power).state;
+            if (isnan(pwr)) pwr = 0;
+
+            float pv_v = id(mppt1_vd_pv_voltage).state;
+            if (isnan(pv_v)) pv_v = id(mppt1_ble_pv_voltage).state;
+            if (isnan(pv_v)) pv_v = 0;
+            if (pv_v > 5 && pv_v > id(mppt1_max_pv_voltage_today))
+              id(mppt1_max_pv_voltage_today) = pv_v;
+
+            float bv = id(mppt1_vd_batt_voltage).state;
+            if (isnan(bv)) bv = id(shunt_battery_voltage).state;
+
+            float bi = id(mppt1_vd_batt_current).state;
+            if (isnan(bi)) bi = 0;
+
+            int state = 1;
+            if (!isnan(id(mppt1_vd_charging_mode_id).state)) {
+              int m = (int) id(mppt1_vd_charging_mode_id).state;
+              if (m >= 3 && m <= 7) state = m;
+            }
+
+            doc["Pv"]["V"] = pv_v;
+            doc["Yield"]["Power"] = pwr;
+
+            // yield_total from VE.Direct is in Wh → divide by 1000 for kWh
+            float total = id(mppt1_vd_yield_total).state;
+            if (!isnan(total) && total > 0)
+              doc["Yield"]["System"] = total / 1000.0f;
+            else if (id(mppt1_yield_lifetime_kwh) > 0)
+              doc["Yield"]["System"] = id(mppt1_yield_lifetime_kwh);
+            else
+              doc["Yield"]["System"] = 0;
+
+            doc["Dc"]["0"]["Voltage"] = bv;
+            doc["Dc"]["0"]["Current"] = bi;
+
+            // History today (day 0)
+            // yield_today from VE.Direct is in Wh → divide by 1000 for kWh
+            float y = id(mppt1_vd_yield_today).state;
+            doc["History"]["Daily"]["0"]["Yield"] = (!isnan(y))
+              ? y / 1000.0f
+              : id(mppt1_yield_today_wh) / 1000.0f;
+
+            float maxp = id(mppt1_vd_max_power_today).state;
+            doc["History"]["Daily"]["0"]["MaxPower"] = (!isnan(maxp)) ? maxp : id(mppt1_max_power_today);
+
+            doc["History"]["Daily"]["0"]["MaxPvVoltage"]      = id(mppt1_max_pv_voltage_today);
+            doc["History"]["Daily"]["0"]["MinBatteryVoltage"] = (id(batt_min_voltage_today) < 1000.0f) ? id(batt_min_voltage_today) : 0.0f;
+            doc["History"]["Daily"]["0"]["MaxBatteryVoltage"] = id(batt_max_voltage_today);
+            doc["History"]["Daily"]["0"]["TimeInBulk"]        = (int) id(mppt1_time_bulk);
+            doc["History"]["Daily"]["0"]["TimeInAbsorption"]  = (int) id(mppt1_time_abs);
+            doc["History"]["Daily"]["0"]["TimeInFloat"]       = (int) id(mppt1_time_float);
+            doc["History"]["Daily"]["0"]["MaxBatteryCurrent"] = id(mppt1_max_batt_current_today);
+
+            // History yesterday (day 1) — stored in kWh
+            doc["History"]["Daily"]["1"]["Yield"]        = id(mppt1_yield_yesterday_kwh);
+            doc["History"]["Daily"]["1"]["MaxPower"]     = id(mppt1_max_power_yesterday);
+            doc["History"]["Daily"]["1"]["MaxPvVoltage"] = id(mppt1_max_pv_voltage_yesterday);
+
+            doc["ErrorCode"]       = (int) id(mppt1_vd_error_code).state;
+            doc["State"]           = state;
+            doc["Mode"]            = 1;
+            doc["MppOperationMode"]= 2;
+
+            std::string out;
+            serializeJson(doc, out);
+            return out;
+
+  # ── MPPT2 → Venus OS ──
+  - interval: ${mppt_publish_interval}
+    then:
+      - mqtt.publish:
+          topic: ${mppt2_venus_topic}
+          retain: true
+          payload: !lambda |-
+            DynamicJsonDocument doc(${json_doc_size});
+
+            float pwr = id(mppt2_vd_pv_power).state;
+            if (isnan(pwr)) pwr = id(mppt2_ble_pv_power).state;
+            if (isnan(pwr)) pwr = 0;
+
+            float pv_v = id(mppt2_vd_pv_voltage).state;
+            if (isnan(pv_v)) pv_v = id(mppt2_ble_pv_voltage).state;
+            if (isnan(pv_v)) pv_v = 0;
+            if (pv_v > 5 && pv_v > id(mppt2_max_pv_voltage_today))
+              id(mppt2_max_pv_voltage_today) = pv_v;
+
+            float bv = id(mppt2_vd_batt_voltage).state;
+            if (isnan(bv)) bv = id(shunt_battery_voltage).state;
+
+            float bi = id(mppt2_vd_batt_current).state;
+            if (isnan(bi)) bi = 0;
+
+            int state = 1;
+            if (!isnan(id(mppt2_vd_charging_mode_id).state)) {
+              int m = (int) id(mppt2_vd_charging_mode_id).state;
+              if (m >= 3 && m <= 7) state = m;
+            }
+
+            doc["Pv"]["V"] = pv_v;
+            doc["Yield"]["Power"] = pwr;
+
+            float total = id(mppt2_vd_yield_total).state;
+            if (!isnan(total) && total > 0)
+              doc["Yield"]["System"] = total / 1000.0f;
+            else if (id(mppt2_yield_lifetime_kwh) > 0)
+              doc["Yield"]["System"] = id(mppt2_yield_lifetime_kwh);
+            else
+              doc["Yield"]["System"] = 0;
+
+            doc["Dc"]["0"]["Voltage"] = bv;
+            doc["Dc"]["0"]["Current"] = bi;
+
+            float y = id(mppt2_vd_yield_today).state;
+            doc["History"]["Daily"]["0"]["Yield"] = (!isnan(y))
+              ? y / 1000.0f
+              : id(mppt2_yield_today_wh) / 1000.0f;
+
+            float maxp = id(mppt2_vd_max_power_today).state;
+            doc["History"]["Daily"]["0"]["MaxPower"] = (!isnan(maxp)) ? maxp : id(mppt2_max_power_today);
+
+            doc["History"]["Daily"]["0"]["MaxPvVoltage"]      = id(mppt2_max_pv_voltage_today);
+            doc["History"]["Daily"]["0"]["MinBatteryVoltage"] = (id(batt_min_voltage_today) < 1000.0f) ? id(batt_min_voltage_today) : 0.0f;
+            doc["History"]["Daily"]["0"]["MaxBatteryVoltage"] = id(batt_max_voltage_today);
+            doc["History"]["Daily"]["0"]["TimeInBulk"]        = (int) id(mppt2_time_bulk);
+            doc["History"]["Daily"]["0"]["TimeInAbsorption"]  = (int) id(mppt2_time_abs);
+            doc["History"]["Daily"]["0"]["TimeInFloat"]       = (int) id(mppt2_time_float);
+            doc["History"]["Daily"]["0"]["MaxBatteryCurrent"] = id(mppt2_max_batt_current_today);
+
+            doc["History"]["Daily"]["1"]["Yield"]        = id(mppt2_yield_yesterday_kwh);
+            doc["History"]["Daily"]["1"]["MaxPower"]     = id(mppt2_max_power_yesterday);
+            doc["History"]["Daily"]["1"]["MaxPvVoltage"] = id(mppt2_max_pv_voltage_yesterday);
+
+            doc["ErrorCode"]       = (int) id(mppt2_vd_error_code).state;
+            doc["State"]           = state;
+            doc["Mode"]            = 1;
+            doc["MppOperationMode"]= 2;
+
+            std::string out;
+            serializeJson(doc, out);
+            return out;
