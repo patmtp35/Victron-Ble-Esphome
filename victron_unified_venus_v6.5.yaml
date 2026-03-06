@@ -1,4 +1,5 @@
 #############################################
+# V6.5 - VE.Direct prioritaire sur données PV (fix croisement BLE/VE.Direct)
 # V6.4 - Maximum substitutions for public release
 # V6.3 - Amelioration remonté Historique MPPT
 # V6.2 - GX ESS amelioration
@@ -40,7 +41,7 @@ substitutions:
   sensor_prefix:    "victron_unified"
   device_description: "Victron BLE + VE.Direct Unified Interface VenusOs Ready"
   projectname:      "Pat.VictronUnifiedVenusReady"
-  appversion:       "6.4.0"
+  appversion:       "6.5.0"
 
   #------------------------------------------
   # Network
@@ -887,7 +888,9 @@ sensor:
       return NAN;
 
   # ════════════════════════════════════════
-  # MPPT1 — unified templates (BLE priority)
+  # MPPT1 — unified templates
+  # PV data  : VE.Direct prioritaire (plus stable, BLE peut envoyer 0W)
+  # Batt data: BLE prioritaire (SmartShunt plus précis)
   # ════════════════════════════════════════
 
   - platform: template
@@ -912,11 +915,12 @@ sensor:
     unit_of_measurement: "V"
     update_interval: ${interval_medium}
     lambda: |-
+      // VE.Direct prioritaire — plus stable que BLE pour les données PV
       float v = NAN;
-      if (!isnan(id(mppt1_ble_pv_voltage).state) && id(mppt1_ble_pv_voltage).state > 5.0)
-        v = id(mppt1_ble_pv_voltage).state;
-      else if (!isnan(id(mppt1_vd_pv_voltage).state) && id(mppt1_vd_pv_voltage).state > 5.0)
+      if (!isnan(id(mppt1_vd_pv_voltage).state) && id(mppt1_vd_pv_voltage).state > 5.0)
         v = id(mppt1_vd_pv_voltage).state;
+      else if (!isnan(id(mppt1_ble_pv_voltage).state) && id(mppt1_ble_pv_voltage).state > 5.0)
+        v = id(mppt1_ble_pv_voltage).state;
       if (!isnan(v) && v > id(mppt1_max_pv_voltage_today))
         id(mppt1_max_pv_voltage_today) = v;
       return isnan(v) ? 0.0f : v;
@@ -928,9 +932,10 @@ sensor:
     unit_of_measurement: "A"
     update_interval: ${interval_medium}
     lambda: |-
-      float i = id(mppt1_ble_batt_current).state;
-      if (!isnan(i) && fabs(i) > 0.01) return i;
-      return id(mppt1_vd_batt_current).state;
+      // VE.Direct prioritaire
+      float i = id(mppt1_vd_batt_current).state;
+      if (!isnan(i)) return i;
+      return id(mppt1_ble_batt_current).state;
 
   - platform: template
     name: "${mppt1_name}_esp_panel_power"
@@ -939,8 +944,12 @@ sensor:
     unit_of_measurement: "W"
     update_interval: ${interval_fast}
     lambda: |-
-      if (!isnan(id(mppt1_ble_pv_power).state)) return id(mppt1_ble_pv_power).state;
-      return id(mppt1_vd_pv_power).state;
+      // VE.Direct prioritaire — BLE peut envoyer 0W même quand le MPPT produit
+      float vd = id(mppt1_vd_pv_power).state;
+      if (!isnan(vd) && vd >= 0) return vd;
+      float ble = id(mppt1_ble_pv_power).state;
+      if (!isnan(ble)) return ble;
+      return 0.0f;
 
   - platform: template
     name: "${mppt1_name}_esp_load_current"
@@ -948,8 +957,10 @@ sensor:
     unit_of_measurement: "A"
     update_interval: ${interval_medium}
     lambda: |-
-      if (!isnan(id(mppt1_ble_load_current).state)) return id(mppt1_ble_load_current).state;
-      return id(mppt1_vd_load_current).state;
+      // VE.Direct prioritaire
+      float vd = id(mppt1_vd_load_current).state;
+      if (!isnan(vd)) return vd;
+      return id(mppt1_ble_load_current).state;
 
   - platform: template
     name: "${mppt1_name}_esp_yield_today"
@@ -987,7 +998,9 @@ sensor:
       return id(mppt1_max_power_today);
 
   # ════════════════════════════════════════
-  # MPPT2 — unified templates (BLE priority)
+  # MPPT2 — unified templates
+  # PV data  : VE.Direct prioritaire (plus stable, BLE peut envoyer 0W)
+  # Batt data: BLE prioritaire (SmartShunt plus précis)
   # ════════════════════════════════════════
 
   - platform: template
@@ -1012,11 +1025,12 @@ sensor:
     unit_of_measurement: "V"
     update_interval: ${interval_medium}
     lambda: |-
+      // VE.Direct prioritaire
       float v = NAN;
-      if (!isnan(id(mppt2_ble_pv_voltage).state) && id(mppt2_ble_pv_voltage).state > 5.0)
-        v = id(mppt2_ble_pv_voltage).state;
-      else if (!isnan(id(mppt2_vd_pv_voltage).state) && id(mppt2_vd_pv_voltage).state > 5.0)
+      if (!isnan(id(mppt2_vd_pv_voltage).state) && id(mppt2_vd_pv_voltage).state > 5.0)
         v = id(mppt2_vd_pv_voltage).state;
+      else if (!isnan(id(mppt2_ble_pv_voltage).state) && id(mppt2_ble_pv_voltage).state > 5.0)
+        v = id(mppt2_ble_pv_voltage).state;
       if (!isnan(v) && v > id(mppt2_max_pv_voltage_today))
         id(mppt2_max_pv_voltage_today) = v;
       return isnan(v) ? 0.0f : v;
@@ -1028,9 +1042,10 @@ sensor:
     unit_of_measurement: "A"
     update_interval: ${interval_medium}
     lambda: |-
-      float i = id(mppt2_ble_batt_current).state;
-      if (!isnan(i) && fabs(i) > 0.01) return i;
-      return id(mppt2_vd_batt_current).state;
+      // VE.Direct prioritaire
+      float i = id(mppt2_vd_batt_current).state;
+      if (!isnan(i)) return i;
+      return id(mppt2_ble_batt_current).state;
 
   - platform: template
     name: "${mppt2_name}_esp_panel_power"
@@ -1039,8 +1054,12 @@ sensor:
     unit_of_measurement: "W"
     update_interval: ${interval_fast}
     lambda: |-
-      if (!isnan(id(mppt2_ble_pv_power).state)) return id(mppt2_ble_pv_power).state;
-      return id(mppt2_vd_pv_power).state;
+      // VE.Direct prioritaire — BLE peut envoyer 0W même quand le MPPT produit
+      float vd = id(mppt2_vd_pv_power).state;
+      if (!isnan(vd) && vd >= 0) return vd;
+      float ble = id(mppt2_ble_pv_power).state;
+      if (!isnan(ble)) return ble;
+      return 0.0f;
 
   - platform: template
     name: "${mppt2_name}_esp_load_current"
@@ -1048,8 +1067,10 @@ sensor:
     unit_of_measurement: "A"
     update_interval: ${interval_medium}
     lambda: |-
-      if (!isnan(id(mppt2_ble_load_current).state)) return id(mppt2_ble_load_current).state;
-      return id(mppt2_vd_load_current).state;
+      // VE.Direct prioritaire
+      float vd = id(mppt2_vd_load_current).state;
+      if (!isnan(vd)) return vd;
+      return id(mppt2_ble_load_current).state;
 
   - platform: template
     name: "${mppt2_name}_esp_yield_today"
