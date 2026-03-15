@@ -820,9 +820,37 @@ sensor:
     unit_of_measurement: "V"
     update_interval: ${interval_fast}
     lambda: |-
-      if (!isnan(id(shunt_ble_batt_voltage).state))
-        return id(shunt_ble_batt_voltage).state;
-      return id(shunt_vd_batt_voltage).state;
+      // VE.Direct prioritaire
+      float vd = id(shunt_vd_batt_voltage).state;
+      if (!isnan(vd) && vd > 10.0f)
+        return vd;
+      // Fallback BLE
+      float ble = id(shunt_ble_batt_voltage).state;
+      if (!isnan(ble) && ble > 10.0f)
+        return ble;
+      return NAN;
+
+  - platform: template
+    name: "${shunt_name}_time_to_go"
+    id: shunt_time_to_go
+    unit_of_measurement: "min"
+    icon: "mdi:battery-clock"
+    update_interval: ${interval_fast}
+    lambda: |-
+      // Essai TTG natif VE.Direct d'abord
+      float ttg = id(shunt_vd_time_to_go).state;
+      if (!isnan(ttg) && ttg > 0)
+        return ttg;
+      // Calcul manuel : (capacité_Wh × SOC%) / |puissance|
+      float p = id(shunt_vd_power).state;
+      if (isnan(p) || p == 0.0f) p = id(shunt_ble_batt_power).state;
+      float soc = id(shunt_soc).state;
+      if (!isnan(p) && p < -10.0f && !isnan(soc)) {
+        float wh_restants = 7680.0f * soc / 100.0f;
+        float heures = wh_restants / (-p);
+        return heures * 60.0f;  // en minutes
+      }
+      return 0.0f;
 
   - platform: template
     name: "${shunt_name}_battery_current"
@@ -833,17 +861,20 @@ sensor:
     icon: "mdi:current-dc"
     update_interval: ${interval_fast}
     lambda: |-
-      float cur = NAN;
-      if (!isnan(id(shunt_ble_batt_current).state))
-        cur = id(shunt_ble_batt_current).state;
-      else
-        cur = id(shunt_vd_batt_current).state;
-
-      if (!isnan(cur)) {
-        float abs_cur = fabs(cur);
+      // VE.Direct prioritaire — plus précis que BLE pour le courant
+      float cur_vd = id(shunt_vd_batt_current).state;
+      if (!isnan(cur_vd) && cur_vd != 0.0f) {
+        float abs_cur = fabs(cur_vd);
         if (abs_cur > id(mppt1_max_batt_current_today)) id(mppt1_max_batt_current_today) = abs_cur;
         if (abs_cur > id(mppt2_max_batt_current_today)) id(mppt2_max_batt_current_today) = abs_cur;
-        return cur;
+        return cur_vd;
+      }
+      float cur_ble = id(shunt_ble_batt_current).state;
+      if (!isnan(cur_ble)) {
+        float abs_cur = fabs(cur_ble);
+        if (abs_cur > id(mppt1_max_batt_current_today)) id(mppt1_max_batt_current_today) = abs_cur;
+        if (abs_cur > id(mppt2_max_batt_current_today)) id(mppt2_max_batt_current_today) = abs_cur;
+        return cur_ble;
       }
       return NAN;
 
@@ -856,9 +887,15 @@ sensor:
     icon: "mdi:flash"
     update_interval: ${interval_fast}
     lambda: |-
+      // VE.Direct prioritaire pour la puissance (plus précis que BLE)
+      float p_vd = id(shunt_vd_power).state;
+      if (!isnan(p_vd))
+        return roundf(p_vd * 100.0f) / 100.0f;
+      // Fallback BLE
       float p_ble = id(shunt_ble_batt_power).state;
       if (!isnan(p_ble))
         return roundf(p_ble * 100.0f) / 100.0f;
+      // Fallback calcul V×I
       float v = id(shunt_vd_batt_voltage).state;
       float i = id(shunt_vd_batt_current).state;
       if (!isnan(v) && !isnan(i))
@@ -873,9 +910,16 @@ sensor:
     icon: "mdi:battery-high"
     update_interval: ${interval_fast}
     lambda: |-
-      if (!isnan(id(shunt_ble_soc).state))
-        return id(shunt_ble_soc).state;
-      return id(shunt_vd_soc).state;
+      // VE.Direct prioritaire — filaire, plus fiable que BLE
+      // BLE garde la dernière valeur même si signal perdu → risque de SOC figé
+      float vd = id(shunt_vd_soc).state;
+      if (!isnan(vd) && vd > 0.0f)
+        return vd;
+      // Fallback BLE uniquement si VE.Direct indisponible
+      float ble = id(shunt_ble_soc).state;
+      if (!isnan(ble))
+        return ble;
+      return NAN;
 
   - platform: template
     name: "${shunt_name}_consumed_ah"
