@@ -36,11 +36,19 @@ Interface ESP32 unifiée pour intégrer des équipements **Victron Energy** dans
 
 ```yaml
 external_components:
-  # BLE Victron
-  - source: github://Fabian-Schmidt/esphome-victron_ble
+  # BLE Victron (fork Kendzione, compatible ESPHome >= 2026.11)
+  - source: github://Kendzione/esphome-victron_ble
   # VE.Direct Victron
   - source: github://KinDR007/VictronMPPT-ESPHOME@main
 ```
+
+> ⚠️ **ESPHome ≥ 2026.11** : le composant d'origine
+> [Fabian-Schmidt/esphome-victron_ble](https://github.com/Fabian-Schmidt/esphome-victron_ble)
+> ne compile plus (`'str_snprintf' was not declared in this scope`), car ESPHome 2026.11.0
+> n'exporte plus `alloc_helpers.h` depuis `helpers.h`. Ce dépôt utilise donc le fork
+> [Kendzione/esphome-victron_ble](https://github.com/Kendzione/esphome-victron_ble).
+> Pour plus de stabilité, vous pouvez figer un commit : `github://Kendzione/esphome-victron_ble@<hash>`.
+> Avec une version d'ESPHome antérieure à 2026.11, le composant d'origine fonctionne aussi.
 
 ---
 
@@ -280,6 +288,10 @@ Et que le `topic` dans sa config correspond à `mppt1_venus_topic` dans le YAML.
 - L'ESP32 doit être à moins de ~10m des équipements Victron
 - Assurez-vous que le BLE est actif sur l'équipement Victron (VictorConnect → paramètres)
 
+### Erreur de compilation `'str_snprintf' was not declared in this scope`
+Le composant BLE d'origine n'est pas compatible avec ESPHome ≥ 2026.11. `validate` passe, mais la compilation échoue dans `victron_ble.h`.
+Utilisez le fork indiqué dans la section *Dépendances ESPHome* (`github://Kendzione/esphome-victron_ble`).
+
 ### `Last transmission too long ago` (VE.Direct)
 Warning normal si le câble VE.Direct n'est pas branché. Vérifiez le câblage et le `rx_pin` correct dans les substitutions.
 
@@ -289,7 +301,8 @@ Warning normal si le câble VE.Direct n'est pas branché. Vérifiez le câblage 
 
 | Version | Description |
 |---|---|
-| 6.5 | VE.Direct prioritaire sur données PV (fix croisement BLE/VE.Direct)
+| 6.5.1 | Composant BLE : fork Kendzione (compilation avec ESPHome ≥ 2026.11) |
+| 6.5 | VE.Direct prioritaire sur données PV (fix croisement BLE/VE.Direct) |
 | 6.4 | Refactoring complet en substitutions — publication publique |
 | 6.3 | Amélioration remontée historique MPPT |
 | 6.2 | GX ESS amélioration |
@@ -307,7 +320,8 @@ MIT — libre d'utilisation, modification et redistribution avec attribution.
 
 ## 🙏 Remerciements
 
-- [Fabian-Schmidt](https://github.com/Fabian-Schmidt/esphome-victron_ble) — composant BLE Victron pour ESPHome
+- [Fabian-Schmidt](https://github.com/Fabian-Schmidt/esphome-victron_ble) — composant BLE Victron pour ESPHome (auteur d'origine)
+- [Kendzione](https://github.com/Kendzione/esphome-victron_ble) — fork du composant BLE compatible ESPHome ≥ 2026.11
 - [KinDR007](https://github.com/KinDR007/VictronMPPT-ESPHOME) — composant VE.Direct pour ESPHome
 - [mr-manuel](https://github.com/mr-manuel/venus-os_dbus-mqtt-solar-charger) — bridge MQTT → dbus Venus OS (solar charger)
 - [freakent](https://github.com/freakent/dbus-mqtt-devices) — bridge MQTT → dbus Venus OS (devices)

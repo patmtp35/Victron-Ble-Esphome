@@ -1,4 +1,5 @@
 #############################################
+# V6.5.1 - Composant BLE : fork Kendzione (compilation ESPHome >= 2026.11)
 # V6.5 - VE.Direct prioritaire sur données PV (fix croisement BLE/VE.Direct)
 # V6.4 - Maximum substitutions for public release
 # V6.3 - Amelioration remonté Historique MPPT
@@ -41,7 +42,7 @@ substitutions:
   sensor_prefix:    "victron_unified"
   device_description: "Victron BLE + VE.Direct Unified Interface VenusOs Ready"
   projectname:      "Pat.VictronUnifiedVenusReady"
-  appversion:       "6.5.0"
+  appversion:       "6.5.1"
 
   #------------------------------------------
   # Network
@@ -73,7 +74,10 @@ substitutions:
   #------------------------------------------
   # External component sources
   #------------------------------------------
-  external_components_source_ble:     github://Fabian-Schmidt/esphome-victron_ble
+  # Fork Kendzione : le composant de Fabian-Schmidt ne compile plus avec
+  # ESPHome >= 2026.11 (str_snprintf introuvable). Revenir a
+  # github://Fabian-Schmidt/esphome-victron_ble une fois le correctif integre en amont.
+  external_components_source_ble:     github://Kendzione/esphome-victron_ble
   external_components_source_vedirect: github://KinDR007/VictronMPPT-ESPHOME@main
 
   #------------------------------------------
