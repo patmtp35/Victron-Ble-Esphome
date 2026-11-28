@@ -8,12 +8,26 @@ Interface ESP32 unifiée pour intégrer des équipements **Victron Energy** dans
 
 ---
 
+## 🔀 Quelle version choisir ?
+
+| Fichier | Pour quelle installation |
+|---|---|
+| `victron_unified_venus_v6.5.yaml` | L'ESP lit **2 MPPT et un SmartShunt**. Le SmartShunt est publié dans Venus OS comme batterie virtuelle (`dbus-mqtt-devices`). |
+| `victron_unified_venus_v6.6.yaml` | L'ESP lit **les 2 MPPT seulement**. La batterie vient directement du GX (par exemple un BMS en CAN). |
+
+La **v6.6 est une évolution adaptée à ma configuration** (batterie avec BMS relié au GX). Elle ne remplace pas la v6.5, conservée pour les installations comme la précédente. La v6.5 n'est plus testée sur mon installation.
+
+> ⚠️ En passant de la v6.5 à la v6.6, la batterie virtuelle disparaît : choisissez **avant** un autre moniteur de batterie sur le GX, et vérifiez vos automatisations, écrans et tableaux de bord qui lisent le SmartShunt.
+> La v6.6 ne contient pas de message de désinscription de l'ancienne batterie virtuelle `battery1` : vérifiez qu'elle a disparu du GX.
+
+---
+
 ## 📋 Fonctionnalités
 
-- ✅ **Double source de données** par appareil : BLE (prioritaire) + VE.Direct (fallback)
+- ✅ **Double source de données** par appareil : BLE + VE.Direct (priorité selon la mesure)
 - ✅ **2 MPPT SmartSolar 100/20** supportés simultanément
-- ✅ **1 SmartShunt 500A** (courant, tension, SoC, Ah consommés)
-- ✅ **Venus OS ready** via MQTT (compatible `dbus-mqtt-solar-charger` et `dbus-mqtt-devices`)
+- ✅ **1 SmartShunt 500A** (courant, tension, SoC, Ah consommés) — *v6.5 uniquement*
+- ✅ **Venus OS ready** via MQTT (`dbus-mqtt-solar-charger` ; `dbus-mqtt-devices` en v6.5 uniquement)
 - ✅ **Home Assistant** via API ESPHome native
 - ✅ Historique journalier complet (Yield, MaxPower, MaxPvVoltage, timers Bulk/Abs/Float)
 - ✅ Toutes les valeurs configurables via les `substitutions`
@@ -27,12 +41,21 @@ Interface ESP32 unifiée pour intégrer des équipements **Victron Energy** dans
 | Microcontrôleur | ESP32 (esp32dev) |
 | Chargeur solaire #1 | Victron SmartSolar MPPT 100/20 |
 | Chargeur solaire #2 | Victron SmartSolar MPPT 100/20 |
-| Moniteur batterie | Victron SmartShunt 500A |
+| Moniteur batterie (v6.5) | Victron SmartShunt 500A |
 | Passerelle domotique | Venus OS (Cerbo GX ou Raspberry Pi) |
 
 ---
 
 ## 📦 Dépendances ESPHome
+
+La **v6.6 fige** les composants externes sur les commits testés (ESPHome 2026.11.1) :
+
+```yaml
+external_components_source_ble:      github://Kendzione/esphome-victron_ble@b9c6358b72320fd89d54f4d52614ec6d53fe6849
+external_components_source_vedirect: github://KinDR007/VictronMPPT-ESPHOME@f5e9b989f76bee745c2581ee75543673c2ea5487
+```
+
+La **v6.5** suit les dernières versions (elle peut donc cesser de compiler après une évolution d'un composant) :
 
 ```yaml
 external_components:
@@ -80,7 +103,7 @@ topic = venus/solarcharger/mppt_100_20
 
 > ⚠️ `history_days` doit être exactement **14**, sinon le script plante.
 
-### 2. dbus-mqtt-devices (freakent)
+### 2. dbus-mqtt-devices (freakent) — v6.5 uniquement
 > https://github.com/freakent/dbus-mqtt-devices/tree/v0.9.0dev
 
 Utilisé pour publier le SmartShunt (batterie) dans Venus OS via le topic `device/victron_unified/`.
@@ -91,8 +114,9 @@ Utilisé pour publier le SmartShunt (batterie) dans Venus OS via le topic `devic
 
 ```
 .
-├── victron_unified_venus.yaml   # fichier principal ESPHome
-├── .common.yaml                 # config commune (wifi, ota, api, logger...)
+├── victron_unified_venus_v6.5.yaml  # MPPT + SmartShunt
+├── victron_unified_venus_v6.6.yaml  # MPPT seuls
+├── .common.yaml                 # config commune (wifi, ota, api, logger...) : non fournie, à créer
 ├── secrets.yaml                 # vos secrets (non versionné)
 └── README.md
 ```
@@ -100,6 +124,8 @@ Utilisé pour publier le SmartShunt (batterie) dans Venus OS via le topic `devic
 ---
 
 ## ⚙️ Configuration — secrets.yaml
+
+> **v6.6** : `venus_portal_id` et les deux secrets `smartshunt500a_*` ne sont plus nécessaires.
 
 ```yaml
 # Réseau
@@ -138,7 +164,17 @@ Dans Venus OS : **Settings** → **VRM online portal** → **VRM Portal ID**
 
 ---
 
-## ⚙️ Configuration — substitutions principales
+## 🔵 v6.6 : associer chaque MPPT à ses identifiants BLE
+
+`mppt1_ble_mac` / `mppt1_ble_key` doivent désigner **le même MPPT** que celui câblé sur `mppt1_uart_rx_pin` (idem pour le MPPT 2). Dans le fichier v6.6, `mppt1` utilise les secrets `mppt100_20_2*` et `mppt2` les secrets `mppt100_20_*` : c'est propre à mon installation, **adaptez-le à la vôtre**.
+
+Vérification : pour un même numéro, la production du jour et la puissance doivent concorder entre les capteurs `*_ble_*` et `*_vd_*`.
+
+---
+
+## ⚙️ Configuration — substitutions principales (exemple v6.5)
+
+> En v6.6, les substitutions `shunt_*`, `*_service_name` et `battery_capacity_ah` n'existent plus.
 
 Toutes les options importantes sont dans la section `substitutions` en haut du fichier YAML :
 
@@ -198,7 +234,9 @@ Pin 4 : RX           ──────► (non connecté)
 
 ---
 
-## 📡 Architecture des données
+## 📡 Architecture des données (v6.5)
+
+> **v6.6** : pas de SmartShunt. Pour la publication des MPPT vers le GX, le VE.Direct est utilisé en premier. La tension batterie a un secours BLE du même MPPT, comme la puissance et la tension PV si le VE.Direct n'a fourni aucune valeur. Les capteurs `*_esp_battery_voltage` de Home Assistant utilisent le BLE en premier.
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -237,7 +275,7 @@ Pin 4 : RX           ──────► (non connecté)
 | `*_esp_max_power_today` | W | Puissance max du jour |
 | `*_esp_charging_mode` | — | Mode de charge (Bulk/Abs/Float) |
 
-### SmartShunt
+### SmartShunt (v6.5)
 | Sensor | Unité | Description |
 |---|---|---|
 | `smartshunt500a_battery_voltage` | V | Tension batterie |
@@ -260,11 +298,18 @@ Pin 4 : RX           ──────► (non connecté)
 - MaxBatteryCurrent, Min/MaxBatteryVoltage
 - Production totale (lifetime)
 
-### Batterie (via dbus-mqtt-devices)
+### Batterie (via dbus-mqtt-devices, v6.5)
 - Tension, courant, puissance DC
 - SoC, ConsumedAh, InstalledCapacity
 - TimeToGo
 - Min/MaxVoltage journaliers
+
+---
+
+## ⚠️ Limites connues (v6.6)
+
+- La bascule sur le BLE en cas de perte du VE.Direct **n'a pas été testée**. Après une perte de liaison en cours de fonctionnement, l'ESP peut conserver et republier la dernière valeur. Le courant batterie publié n'a pas de secours BLE.
+- Après un redémarrage de l'ESP, certaines données d'historique (dont celles de la veille) repartent à zéro côté GX.
 
 ---
 
@@ -301,6 +346,7 @@ Warning normal si le câble VE.Direct n'est pas branché. Vérifiez le câblage 
 
 | Version | Description |
 |---|---|
+| 6.6 | MPPT seuls : retrait du SmartShunt, de `dbus-mqtt-devices` et du keepalive ; composants externes figés ; tension de secours et min/max par MPPT ; publication seulement si une tension MPPT est disponible |
 | 6.5.1 | Composant BLE : fork Kendzione (compilation avec ESPHome ≥ 2026.11) |
 | 6.5 | VE.Direct prioritaire sur données PV (fix croisement BLE/VE.Direct) |
 | 6.4 | Refactoring complet en substitutions — publication publique |
@@ -324,4 +370,4 @@ MIT — libre d'utilisation, modification et redistribution avec attribution.
 - [Kendzione](https://github.com/Kendzione/esphome-victron_ble) — fork du composant BLE compatible ESPHome ≥ 2026.11
 - [KinDR007](https://github.com/KinDR007/VictronMPPT-ESPHOME) — composant VE.Direct pour ESPHome
 - [mr-manuel](https://github.com/mr-manuel/venus-os_dbus-mqtt-solar-charger) — bridge MQTT → dbus Venus OS (solar charger)
-- [freakent](https://github.com/freakent/dbus-mqtt-devices) — bridge MQTT → dbus Venus OS (devices)
+- [freakent](https://github.com/freakent/dbus-mqtt-devices) — bridge MQTT → dbus Venus OS (devices, v6.5)
